@@ -38,3 +38,15 @@ Acesse: http://localhost:8080
 - Logo aplicada no menu lateral, painel e recibos
 - Dados do comprador e contatos exibidos no sistema
 - Tema em verde/branco seguindo a marca
+
+## Atualização solicitada
+
+- Provas com cliente cadastrado ou nome avulso, quantidade de saca, cata e resultado padrão "Em análise".
+- Provas vinculadas aparecem dentro do painel do cliente.
+- Painel do cliente com vendas, estoque restante, saldo por tipo de café e cálculo de juros por taxa/mês em atraso.
+- Tipos de café padronizados: Duro, Duro riado, Duro riado Rio, Riado rio, Rio e Escolha.
+- Compras com cálculo de sacas por peso dividido pelo kg/saca e ajuste manual.
+- Edição e exclusão de clientes, compras e vendas.
+- Venda recalcula status do lote para Vendido ou Vendido parcial.
+- Venda permite editar preço, juros, meses em atraso e status de recebimento.
+- Busca nos seletores de cliente/fornecedor para facilitar no celular.
