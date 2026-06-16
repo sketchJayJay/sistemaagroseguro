@@ -1,0 +1,17 @@
+{% extends 'base.html' %}{% block content %}
+<h1>Prova e classificação</h1><p class="subtitle">Registre bebida, peneira, umidade, defeitos e observações por lote.</p>
+<div class="card">
+<form method="post" class="form">
+  <div><label>Data</label><input type="date" name="data" value="{{ hoje }}" required></div>
+  <div><label>Compra/Lote</label><select name="compra_id"><option value="">Avulsa</option>{% for c in compras %}<option value="{{ c.id }}">{{ c.lote or ('Compra ' ~ c.id) }} - {{ c.pessoa_nome or '' }}</option>{% endfor %}</select></div>
+  <div><label>Bebida</label><input name="bebida" placeholder="Dura, Mole..."></div>
+  <div><label>Peneira</label><input name="peneira"></div>
+  <div><label>Umidade</label><input name="umidade"></div>
+  <div><label>Defeitos</label><input name="defeitos"></div>
+  <div><label>Nota</label><input name="nota"></div>
+  <div><label>Classificação</label><input name="classificacao"></div>
+  <div><label>Observação</label><input name="observacao"></div>
+  <button class="btn">Salvar prova</button>
+</form>
+<table><tr><th>Data</th><th>Lote</th><th>Fornecedor</th><th>Bebida</th><th>Classificação</th><th>Nota</th><th>Obs.</th></tr>{% for p in provas %}<tr><td>{{ p.data }}</td><td>{{ p.lote or '-' }}</td><td>{{ p.pessoa_nome or '-' }}</td><td>{{ p.bebida or '-' }}</td><td>{{ p.classificacao or '-' }}</td><td>{{ p.nota or '-' }}</td><td>{{ p.observacao or '-' }}</td></tr>{% endfor %}</table>
+</div>{% endblock %}

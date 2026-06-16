@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Painel geral</h1>
+<p class="subtitle">Visão rápida da compra, prova, venda e dinheiro rodando no café.</p>
+<div class="grid">
+  <div class="card metric"><small>Total comprado</small><strong>{{ total_compras|money }}</strong></div>
+  <div class="card metric"><small>Total vendido</small><strong>{{ total_vendas|money }}</strong></div>
+  <div class="card metric"><small>Estoque atual</small><strong>{{ '%.2f'|format(estoque) }} sacas</strong></div>
+  <div class="card metric"><small>Saldo financeiro</small><strong>{{ saldo|money }}</strong></div>
+</div>
+<div class="row">
+  <div class="card">
+    <div class="section-title"><h2>Últimas compras</h2><a class="btn light" href="{{ url_for('compras') }}">Nova compra</a></div>
+    <table><tr><th>Data</th><th>Fornecedor</th><th>Lote</th><th>Total</th></tr>
+    {% for c in ultimas_compras %}<tr><td>{{ c.data }}</td><td>{{ c.pessoa_nome or '-' }}</td><td>{{ c.lote or '-' }}</td><td>{{ c.valor_total|money }}</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Últimas vendas</h2><a class="btn light" href="{{ url_for('vendas') }}">Nova venda</a></div>
+    <table><tr><th>Data</th><th>Cliente</th><th>Lote</th><th>Total</th></tr>
+    {% for v in ultimas_vendas %}<tr><td>{{ v.data }}</td><td>{{ v.pessoa_nome or '-' }}</td><td>{{ v.lote or '-' }}</td><td>{{ v.valor_total|money }}</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

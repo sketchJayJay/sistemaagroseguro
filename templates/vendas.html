@@ -1,0 +1,16 @@
+{% extends 'base.html' %}{% block content %}
+<h1>Vendas de café</h1><p class="subtitle">Lance a saída. O financeiro entra automático como entrada.</p>
+<div class="card">
+<form method="post" class="form">
+  <div><label>Data</label><input type="date" name="data" value="{{ hoje }}" required></div>
+  <div><label>Cliente</label><select name="pessoa_id"><option value="">Sem cadastro</option>{% for p in pessoas %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}</select></div>
+  <div><label>Lote</label><input name="lote"></div>
+  <div><label>Tipo de café</label><input name="tipo_cafe"></div>
+  <div><label>Sacas</label><input type="number" step="0.01" name="quantidade_sacas" required></div>
+  <div><label>Valor por saca</label><input type="number" step="0.01" name="valor_saca" required></div>
+  <div><label>Status</label><select name="status_recebimento"><option>Pendente</option><option>Recebido</option></select></div>
+  <div><label>Observação</label><input name="observacao"></div>
+  <button class="btn">Lançar venda</button>
+</form>
+<table><tr><th>Data</th><th>Cliente</th><th>Lote</th><th>Tipo</th><th>Sacas</th><th>Valor/saca</th><th>Total</th><th>Status</th></tr>{% for v in vendas %}<tr><td>{{ v.data }}</td><td>{{ v.pessoa_nome or '-' }}</td><td>{{ v.lote or '-' }}</td><td>{{ v.tipo_cafe or '-' }}</td><td>{{ v.quantidade_sacas }}</td><td>{{ v.valor_saca|money }}</td><td>{{ v.valor_total|money }}</td><td><span class="badge {% if v.status_recebimento=='Recebido' %}ok{% else %}bad{% endif %}">{{ v.status_recebimento }}</span></td></tr>{% endfor %}</table>
+</div>{% endblock %}
