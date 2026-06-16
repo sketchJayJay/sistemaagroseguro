@@ -30,3 +30,11 @@ Acesse: http://localhost:8080
 - Tipo: Dockerfile
 - Porta: 8080
 - Volume recomendado para não perder dados: `/app/data`
+
+
+## Personalização aplicada
+
+- Identidade visual da empresa **Café Boa Vista**
+- Logo aplicada no menu lateral, painel e recibos
+- Dados do comprador e contatos exibidos no sistema
+- Tema em verde/branco seguindo a marca

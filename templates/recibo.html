@@ -1,1 +1,42 @@
-<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recibo</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head><body class="print"><div class="receipt"><h1>RECIBO DE {{ 'COMPRA' if tipo=='compra' else 'VENDA' }} DE CAFÉ</h1>{% if item %}<p><b>Data:</b> {{ item.data }}</p><p><b>{{ 'Fornecedor' if tipo=='compra' else 'Cliente' }}:</b> {{ item.pessoa_nome or 'Sem cadastro' }}</p><p><b>CPF/CNPJ:</b> {{ item.documento or '-' }}</p><p><b>Telefone:</b> {{ item.telefone or '-' }}</p><hr><p><b>Lote:</b> {{ item.lote or '-' }}</p><p><b>Tipo de café:</b> {{ item.tipo_cafe or '-' }}</p><p><b>Quantidade:</b> {{ item.quantidade_sacas|num }} sacas</p><p><b>Valor por saca:</b> {{ item.valor_saca|money }}</p><p><b>Total:</b> {{ item.valor_total|money }}</p><p><b>Status:</b> {{ item.status_pagamento if tipo=='compra' else item.status_recebimento }}</p><p><b>Forma de pagamento:</b> {{ item.forma_pagamento or '-' }}</p><p><b>Observação:</b> {{ item.observacao or '-' }}</p><div class="assinatura">Assinatura</div><button onclick="window.print()" class="btn no-print">Imprimir</button>{% else %}<p>Registro não encontrado.</p>{% endif %}</div></body></html>
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Recibo</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="print">
+  <div class="receipt">
+    <div class="receipt-head">
+      <img src="{{ url_for('static', filename='logo_boavista.jpg') }}" alt="Logo Café Boa Vista">
+      <div>
+        <h1>RECIBO DE {{ 'COMPRA' if tipo=='compra' else 'VENDA' }} DE CAFÉ</h1>
+        <p class="receipt-company"><b>Café Boa Vista</b> • Comprador: Sebastião Lopes Filho</p>
+        <p class="receipt-company">Telefones: (33) 99970-7857 / (33) 98459-1051</p>
+        <p class="receipt-company">Grumarinho - próximo Neblina, Divino - MG</p>
+      </div>
+    </div>
+    {% if item %}
+      <p><b>Data:</b> {{ item.data }}</p>
+      <p><b>{{ 'Fornecedor' if tipo=='compra' else 'Cliente' }}:</b> {{ item.pessoa_nome or 'Sem cadastro' }}</p>
+      <p><b>CPF/CNPJ:</b> {{ item.documento or '-' }}</p>
+      <p><b>Telefone:</b> {{ item.telefone or '-' }}</p>
+      <hr>
+      <p><b>Lote:</b> {{ item.lote or '-' }}</p>
+      <p><b>Tipo de café:</b> {{ item.tipo_cafe or '-' }}</p>
+      <p><b>Quantidade:</b> {{ item.quantidade_sacas|num }} sacas</p>
+      <p><b>Valor por saca:</b> {{ item.valor_saca|money }}</p>
+      <p><b>Total:</b> {{ item.valor_total|money }}</p>
+      <p><b>Status:</b> {{ item.status_pagamento if tipo=='compra' else item.status_recebimento }}</p>
+      <p><b>Forma de pagamento:</b> {{ item.forma_pagamento or '-' }}</p>
+      <p><b>Observação:</b> {{ item.observacao or '-' }}</p>
+      <div class="assinatura">Assinatura</div>
+      <p class="receipt-slogan">Servir bem e honestidade é nossa missão</p>
+      <button onclick="window.print()" class="btn no-print">Imprimir</button>
+    {% else %}
+      <p>Registro não encontrado.</p>
+    {% endif %}
+  </div>
+</body>
+</html>
