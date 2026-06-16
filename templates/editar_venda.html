@@ -1,0 +1,20 @@
+{% extends 'base.html' %}{% block content %}
+<h1>Editar venda</h1><p class="subtitle">Altere preço, quantidade, juros, cliente ou status. O estoque e financeiro são recalculados.</p>
+<div class="card"><form method="post" class="form">
+  <div><label>Data</label><input type="date" name="data" value="{{ venda.data }}" required></div>
+  <div><label>Buscar cliente</label><input type="search" class="select-search" data-target="pessoa_id" placeholder="Digite para filtrar"></div>
+  <div><label>Cliente</label><select name="pessoa_id" id="pessoa_id"><option value="">Sem cadastro</option>{% for p in pessoas %}<option value="{{ p.id }}" {% if venda.pessoa_id==p.id %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}</select></div>
+  <div><label>Lote do estoque</label><select name="compra_id"><option value="">Venda avulsa</option>{% for l in lotes %}<option value="{{ l.id }}" {% if venda.compra_id==l.id %}selected{% endif %}>{{ l.lote or ('Lote ' ~ l.id) }} - {{ l.estoque_lote|num }} sacas</option>{% endfor %}</select></div>
+  <div><label>Lote manual</label><input name="lote" value="{{ venda.lote or '' }}"></div>
+  <div><label>Tipo do café</label><select name="tipo_cafe"><option value="">Pegar do lote/selecionar</option>{% for t in tipos_cafe %}<option {% if venda.tipo_cafe==t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <div><label>Sacas</label><input type="number" step="0.01" name="quantidade_sacas" value="{{ venda.quantidade_sacas }}" required></div>
+  <div><label>Valor venda/saca</label><input type="number" step="0.01" name="valor_saca" value="{{ venda.valor_saca }}" required></div>
+  <div><label>Custo/saca avulso</label><input type="number" step="0.01" name="custo_saca" value="{{ venda.custo_saca }}"></div>
+  <div><label>Taxa juros % ao mês</label><input type="number" step="0.01" name="juros_percentual" value="{{ venda.juros_percentual or 0 }}"></div>
+  <div><label>Meses em atraso</label><input type="number" step="0.01" name="meses_atraso" value="{{ venda.meses_atraso or 0 }}"></div>
+  <div><label>Forma recebimento</label><input name="forma_pagamento" value="{{ venda.forma_pagamento or '' }}"></div>
+  <div><label>Recebimento</label><select name="status_recebimento"><option {% if venda.status_recebimento=='Pendente' %}selected{% endif %}>Pendente</option><option {% if venda.status_recebimento=='Recebido' %}selected{% endif %}>Recebido</option></select></div>
+  <div class="span"><label>Observação</label><input name="observacao" value="{{ venda.observacao or '' }}"></div>
+  <button class="btn">Salvar alterações</button><a class="btn light" href="{{ url_for('vendas') }}">Voltar</a>
+</form></div>
+{% endblock %}

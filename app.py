@@ -9,6 +9,8 @@ DB_DIR = Path("data")
 DB_DIR.mkdir(exist_ok=True)
 DB_PATH = DB_DIR / "controle_cafe.sqlite3"
 
+TIPOS_CAFE = ["Duro", "Duro riado", "Duro riado Rio", "Riado rio", "Rio", "Escolha"]
+
 
 def br_money(value):
     try:
@@ -45,7 +47,7 @@ def add_column(cur, table, column, definition):
 
 def init_db():
     con = db(); cur = con.cursor()
-    cur.executescript('''
+    cur.executescript("""
     CREATE TABLE IF NOT EXISTS pessoas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tipo TEXT NOT NULL,
@@ -67,6 +69,8 @@ def init_db():
         tipo_cafe TEXT,
         quantidade_sacas REAL NOT NULL DEFAULT 0,
         peso_kg REAL NOT NULL DEFAULT 0,
+        divisor_saca REAL DEFAULT 60,
+        ajuste_sacas REAL DEFAULT 0,
         valor_saca REAL NOT NULL DEFAULT 0,
         valor_total REAL NOT NULL DEFAULT 0,
         status_pagamento TEXT DEFAULT 'Pendente',
@@ -80,8 +84,14 @@ def init_db():
     );
     CREATE TABLE IF NOT EXISTS provas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pessoa_id INTEGER,
         compra_id INTEGER,
         data TEXT NOT NULL,
+        cata TEXT,
+        nome_cliente TEXT,
+        nome_avulso TEXT,
+        quantidade REAL DEFAULT 0,
+        quantidade_sacas REAL DEFAULT 0,
         bebida TEXT,
         peneira TEXT,
         umidade TEXT,
@@ -92,9 +102,10 @@ def init_db():
         docura TEXT,
         nota TEXT,
         classificacao TEXT,
-        aprovado TEXT DEFAULT 'Aprovado',
+        aprovado TEXT DEFAULT 'Em análise',
         observacao TEXT,
-        FOREIGN KEY(compra_id) REFERENCES compras(id)
+        FOREIGN KEY(compra_id) REFERENCES compras(id),
+        FOREIGN KEY(pessoa_id) REFERENCES pessoas(id)
     );
     CREATE TABLE IF NOT EXISTS vendas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,6 +116,10 @@ def init_db():
         tipo_cafe TEXT,
         quantidade_sacas REAL NOT NULL DEFAULT 0,
         valor_saca REAL NOT NULL DEFAULT 0,
+        subtotal_cafe REAL DEFAULT 0,
+        juros_percentual REAL DEFAULT 0,
+        meses_atraso REAL DEFAULT 0,
+        valor_juros REAL DEFAULT 0,
         valor_total REAL NOT NULL DEFAULT 0,
         custo_saca REAL DEFAULT 0,
         lucro_total REAL DEFAULT 0,
@@ -124,16 +139,18 @@ def init_db():
         status TEXT DEFAULT 'Pendente',
         origem TEXT
     );
-    ''')
+    """)
     for table, cols in {
         'pessoas': [('documento','TEXT'),('whatsapp','TEXT'),('endereco','TEXT'),('fazenda','TEXT')],
-        'compras': [('forma_pagamento','TEXT'),('frete','REAL DEFAULT 0'),('outras_despesas','REAL DEFAULT 0'),('origem_cafe','TEXT'),('status_lote',"TEXT DEFAULT 'Em estoque'")],
-        'provas': [('aroma','TEXT'),('corpo','TEXT'),('acidez','TEXT'),('docura','TEXT'),('aprovado',"TEXT DEFAULT 'Aprovado'")],
-        'vendas': [('compra_id','INTEGER'),('custo_saca','REAL DEFAULT 0'),('lucro_total','REAL DEFAULT 0'),('forma_pagamento','TEXT')],
+        'compras': [('forma_pagamento','TEXT'),('frete','REAL DEFAULT 0'),('outras_despesas','REAL DEFAULT 0'),('origem_cafe','TEXT'),('status_lote',"TEXT DEFAULT 'Em estoque'"),('divisor_saca','REAL DEFAULT 60'),('ajuste_sacas','REAL DEFAULT 0')],
+        'provas': [('pessoa_id','INTEGER'),('cata','TEXT'),('nome_cliente','TEXT'),('nome_avulso','TEXT'),('quantidade','REAL DEFAULT 0'),('quantidade_sacas','REAL DEFAULT 0'),('aroma','TEXT'),('corpo','TEXT'),('acidez','TEXT'),('docura','TEXT'),('aprovado',"TEXT DEFAULT 'Em análise'")],
+        'vendas': [('compra_id','INTEGER'),('custo_saca','REAL DEFAULT 0'),('lucro_total','REAL DEFAULT 0'),('forma_pagamento','TEXT'),('subtotal_cafe','REAL DEFAULT 0'),('juros_percentual','REAL DEFAULT 0'),('meses_atraso','REAL DEFAULT 0'),('valor_juros','REAL DEFAULT 0')],
         'financeiro': [('categoria','TEXT')]
     }.items():
         for column, definition in cols:
             add_column(cur, table, column, definition)
+    cur.execute("UPDATE provas SET aprovado='Em análise' WHERE aprovado IS NULL OR aprovado='' OR aprovado='Aprovado'")
+    cur.execute("UPDATE vendas SET subtotal_cafe=valor_total WHERE subtotal_cafe IS NULL OR subtotal_cafe=0")
     con.commit(); con.close()
 
 
@@ -146,7 +163,15 @@ def fetchone(query, params=()):
 
 
 def fnum(name):
-    raw = (request.form.get(name) or '0').replace('.', '').replace(',', '.') if isinstance(request.form.get(name), str) else request.form.get(name)
+    val = request.form.get(name)
+    if isinstance(val, str):
+        raw = val.strip()
+        if raw.count(',') == 1 and raw.count('.') >= 1:
+            raw = raw.replace('.', '').replace(',', '.')
+        else:
+            raw = raw.replace(',', '.')
+    else:
+        raw = val
     try: return float(raw or 0)
     except Exception: return 0.0
 
@@ -158,8 +183,43 @@ def lote_estoque_expr():
     return """c.quantidade_sacas - COALESCE((SELECT SUM(v.quantidade_sacas) FROM vendas v WHERE v.compra_id=c.id),0)"""
 
 
+def calc_sacas(peso, divisor, ajuste, informada=0):
+    if informada:
+        return informada
+    divisor = divisor or 60
+    return (peso / divisor) + ajuste if peso else ajuste
+
+
+def update_financeiro(origem, data, tipo, descricao, categoria, valor, status):
+    con = db(); cur = con.cursor()
+    cur.execute("DELETE FROM financeiro WHERE origem=?", (origem,))
+    cur.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)", (data, tipo, descricao, categoria, valor, status, origem))
+    con.commit(); con.close()
+
+
+def update_compra_status(compra_id):
+    if not compra_id: return
+    row = fetchone(f"SELECT c.id, c.quantidade_sacas, ({lote_estoque_expr()}) estoque FROM compras c WHERE c.id=?", (compra_id,))
+    if not row: return
+    estoque = float(row['estoque'] or 0)
+    status = 'Vendido' if estoque <= 0.0001 else ('Vendido parcial' if estoque < float(row['quantidade_sacas'] or 0) else 'Em estoque')
+    con = db(); con.execute("UPDATE compras SET status_lote=? WHERE id=?", (status, compra_id)); con.commit(); con.close()
+
+
+def update_all_status():
+    ids = [r['id'] for r in fetchall("SELECT id FROM compras")]
+    for i in ids: update_compra_status(i)
+
+
+def get_pessoas_choices(where=""):
+    sql = "SELECT * FROM pessoas"
+    if where: sql += " WHERE " + where
+    return fetchall(sql + " ORDER BY nome")
+
+
 @app.route('/')
 def index():
+    update_all_status()
     total_compras = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM compras")['v']
     total_vendas = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas")['v']
     sacas_compradas = fetchone("SELECT COALESCE(SUM(quantidade_sacas),0) v FROM compras")['v']
@@ -196,69 +256,220 @@ def pessoas():
     return render_template('pessoas.html', pessoas=rows, q=q)
 
 
+@app.route('/pessoas/<int:pessoa_id>/editar', methods=['GET','POST'])
+def editar_pessoa(pessoa_id):
+    pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
+    if not pessoa:
+        flash('Cliente não encontrado.'); return redirect(url_for('pessoas'))
+    if request.method == 'POST':
+        con = db()
+        con.execute("""UPDATE pessoas SET tipo=?, nome=?, documento=?, telefone=?, whatsapp=?, cidade=?, endereco=?, fazenda=?, observacao=? WHERE id=?""",
+                    (request.form['tipo'], request.form['nome'], request.form.get('documento'), request.form.get('telefone'), request.form.get('whatsapp'), request.form.get('cidade'), request.form.get('endereco'), request.form.get('fazenda'), request.form.get('observacao'), pessoa_id))
+        con.commit(); con.close(); flash('Cadastro atualizado.')
+        return redirect(url_for('painel_cliente', pessoa_id=pessoa_id))
+    return render_template('editar_pessoa.html', pessoa=pessoa)
+
+
+@app.route('/pessoas/<int:pessoa_id>/excluir', methods=['POST'])
+def excluir_pessoa(pessoa_id):
+    con = db()
+    con.execute("UPDATE compras SET pessoa_id=NULL WHERE pessoa_id=?", (pessoa_id,))
+    con.execute("UPDATE vendas SET pessoa_id=NULL WHERE pessoa_id=?", (pessoa_id,))
+    con.execute("UPDATE provas SET pessoa_id=NULL WHERE pessoa_id=?", (pessoa_id,))
+    con.execute("DELETE FROM pessoas WHERE id=?", (pessoa_id,))
+    con.commit(); con.close(); flash('Cliente removido. Históricos foram mantidos sem vínculo.')
+    return redirect(url_for('pessoas'))
+
+
+
+@app.route('/clientes')
+def clientes():
+    q = request.args.get('q','').strip()
+    sql = """SELECT * FROM pessoas
+             WHERE tipo IN ('Cliente','Cliente e Fornecedor')"""
+    params = []
+    if q:
+        sql += " AND (nome LIKE ? OR documento LIKE ? OR telefone LIKE ? OR whatsapp LIKE ? OR cidade LIKE ? OR fazenda LIKE ?)"
+        like = f"%{q}%"
+        params = [like, like, like, like, like, like]
+    sql += " ORDER BY nome"
+    rows = fetchall(sql, params)
+    return render_template('clientes.html', clientes=rows, q=q)
+
+@app.route('/clientes/<int:pessoa_id>')
+def painel_cliente(pessoa_id):
+    pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
+    if not pessoa:
+        flash('Cliente não encontrado.'); return redirect(url_for('pessoas'))
+    taxa = float(request.args.get('taxa_juros') or 0)
+    meses = float(request.args.get('meses_atraso') or 0)
+    vendas_rows = fetchall("""SELECT v.*, c.lote lote_compra FROM vendas v LEFT JOIN compras c ON c.id=v.compra_id WHERE v.pessoa_id=? ORDER BY v.id DESC""", (pessoa_id,))
+    compras_rows = fetchall(f"""SELECT c.*, ({lote_estoque_expr()}) estoque_lote,
+        COALESCE((SELECT SUM(v.quantidade_sacas) FROM vendas v WHERE v.compra_id=c.id),0) vendido
+        FROM compras c WHERE c.pessoa_id=? ORDER BY c.id DESC""", (pessoa_id,))
+    provas_rows = fetchall("""SELECT pr.*, c.lote FROM provas pr LEFT JOIN compras c ON c.id=pr.compra_id WHERE pr.pessoa_id=? ORDER BY pr.id DESC""", (pessoa_id,))
+    estoque_tipo = fetchall(f"""SELECT COALESCE(c.tipo_cafe,'Sem tipo') tipo, SUM({lote_estoque_expr()}) sacas, SUM(({lote_estoque_expr()}) * c.valor_saca) valor
+        FROM compras c WHERE c.pessoa_id=? GROUP BY COALESCE(c.tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
+    saldo_tipo = fetchall("""SELECT COALESCE(tipo_cafe,'Sem tipo') tipo, SUM(valor_total) valor, SUM(quantidade_sacas) sacas
+        FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente' GROUP BY COALESCE(tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
+    saldo_pendente = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))['v']
+    juros = saldo_pendente * (taxa/100) * meses
+    return render_template('cliente_painel.html', pessoa=pessoa, vendas=vendas_rows, compras=compras_rows, provas=provas_rows,
+                           estoque_tipo=estoque_tipo, saldo_tipo=saldo_tipo, saldo_pendente=saldo_pendente,
+                           taxa=taxa, meses=meses, juros=juros, total_com_juros=saldo_pendente+juros, tipos_cafe=TIPOS_CAFE)
+
+
 @app.route('/compras', methods=['GET','POST'])
 def compras():
-    pessoas_rows = fetchall("SELECT * FROM pessoas WHERE tipo IN ('Fornecedor','Cliente e Fornecedor') ORDER BY nome")
+    pessoas_rows = get_pessoas_choices("tipo IN ('Fornecedor','Cliente e Fornecedor')")
     if request.method == 'POST':
-        qtd, valor_saca = fnum('quantidade_sacas'), fnum('valor_saca')
+        peso, divisor, ajuste, informada = fnum('peso_kg'), fnum('divisor_saca') or 60, fnum('ajuste_sacas'), fnum('quantidade_sacas')
+        qtd = calc_sacas(peso, divisor, ajuste, informada)
+        valor_saca = fnum('valor_saca')
         frete, outras = fnum('frete'), fnum('outras_despesas')
         total = qtd * valor_saca + frete + outras
         con = db(); cur = con.cursor()
-        cur.execute("""INSERT INTO compras (pessoa_id,data,lote,tipo_cafe,quantidade_sacas,peso_kg,valor_saca,valor_total,status_pagamento,forma_pagamento,frete,outras_despesas,origem_cafe,status_lote,observacao)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (request.form.get('pessoa_id') or None, request.form['data'], request.form.get('lote'), request.form.get('tipo_cafe'), qtd, fnum('peso_kg'), valor_saca, total, request.form.get('status_pagamento'), request.form.get('forma_pagamento'), frete, outras, request.form.get('origem_cafe'), request.form.get('status_lote'), request.form.get('observacao')))
+        cur.execute("""INSERT INTO compras (pessoa_id,data,lote,tipo_cafe,quantidade_sacas,peso_kg,divisor_saca,ajuste_sacas,valor_saca,valor_total,status_pagamento,forma_pagamento,frete,outras_despesas,origem_cafe,status_lote,observacao)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (request.form.get('pessoa_id') or None, request.form['data'], request.form.get('lote'), request.form.get('tipo_cafe'), qtd, peso, divisor, ajuste, valor_saca, total, request.form.get('status_pagamento'), request.form.get('forma_pagamento'), frete, outras, request.form.get('origem_cafe'), request.form.get('status_lote') or 'Em estoque', request.form.get('observacao')))
         compra_id = cur.lastrowid
         lote = request.form.get('lote') or f"Compra {compra_id}"
         cur.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
                     (request.form['data'], 'Saída', f"Compra de café - {lote}", 'Compra de café', total, request.form.get('status_pagamento'), f"compra:{compra_id}"))
-        con.commit(); con.close(); flash('Compra lançada. Lote, estoque e financeiro atualizados.')
+        con.commit(); con.close(); flash('Compra lançada. Sacas calculadas, lote, estoque e financeiro atualizados.')
         return redirect(url_for('compras'))
     rows = fetchall("""SELECT compras.*, pessoas.nome pessoa_nome FROM compras LEFT JOIN pessoas ON pessoas.id = compras.pessoa_id ORDER BY compras.id DESC""")
-    return render_template('compras.html', compras=rows, pessoas=pessoas_rows, hoje=today())
+    return render_template('compras.html', compras=rows, pessoas=pessoas_rows, hoje=today(), tipos_cafe=TIPOS_CAFE)
+
+
+@app.route('/compras/<int:compra_id>/editar', methods=['GET','POST'])
+def editar_compra(compra_id):
+    compra = fetchone("SELECT * FROM compras WHERE id=?", (compra_id,))
+    if not compra:
+        flash('Compra não encontrada.'); return redirect(url_for('compras'))
+    pessoas_rows = get_pessoas_choices("tipo IN ('Fornecedor','Cliente e Fornecedor')")
+    if request.method == 'POST':
+        peso, divisor, ajuste, informada = fnum('peso_kg'), fnum('divisor_saca') or 60, fnum('ajuste_sacas'), fnum('quantidade_sacas')
+        qtd = calc_sacas(peso, divisor, ajuste, informada)
+        valor_saca = fnum('valor_saca'); frete, outras = fnum('frete'), fnum('outras_despesas')
+        total = qtd * valor_saca + frete + outras
+        con = db(); con.execute("""UPDATE compras SET pessoa_id=?, data=?, lote=?, tipo_cafe=?, quantidade_sacas=?, peso_kg=?, divisor_saca=?, ajuste_sacas=?, valor_saca=?, valor_total=?, status_pagamento=?, forma_pagamento=?, frete=?, outras_despesas=?, origem_cafe=?, status_lote=?, observacao=? WHERE id=?""",
+            (request.form.get('pessoa_id') or None, request.form['data'], request.form.get('lote'), request.form.get('tipo_cafe'), qtd, peso, divisor, ajuste, valor_saca, total, request.form.get('status_pagamento'), request.form.get('forma_pagamento'), frete, outras, request.form.get('origem_cafe'), request.form.get('status_lote'), request.form.get('observacao'), compra_id))
+        con.commit(); con.close()
+        update_financeiro(f"compra:{compra_id}", request.form['data'], 'Saída', f"Compra de café - {request.form.get('lote') or compra_id}", 'Compra de café', total, request.form.get('status_pagamento'))
+        update_compra_status(compra_id)
+        flash('Compra atualizada.')
+        return redirect(url_for('compras'))
+    return render_template('editar_compra.html', compra=compra, pessoas=pessoas_rows, tipos_cafe=TIPOS_CAFE)
+
+
+@app.route('/compras/<int:compra_id>/excluir', methods=['POST'])
+def excluir_compra(compra_id):
+    con = db()
+    con.execute("DELETE FROM financeiro WHERE origem=?", (f"compra:{compra_id}",))
+    vendas_ids = [r['id'] for r in con.execute("SELECT id FROM vendas WHERE compra_id=?", (compra_id,)).fetchall()]
+    for vid in vendas_ids:
+        con.execute("DELETE FROM financeiro WHERE origem=?", (f"venda:{vid}",))
+    con.execute("DELETE FROM vendas WHERE compra_id=?", (compra_id,))
+    con.execute("DELETE FROM provas WHERE compra_id=?", (compra_id,))
+    con.execute("DELETE FROM compras WHERE id=?", (compra_id,))
+    con.commit(); con.close(); flash('Compra excluída junto com vendas/provas vinculadas.')
+    return redirect(url_for('compras'))
 
 
 @app.route('/provas', methods=['GET','POST'])
 def provas():
     compras_rows = fetchall("""SELECT compras.*, pessoas.nome pessoa_nome FROM compras LEFT JOIN pessoas ON pessoas.id = compras.pessoa_id ORDER BY compras.id DESC""")
+    pessoas_rows = get_pessoas_choices("")
     if request.method == 'POST':
+        pessoa_id = request.form.get('pessoa_id') or None
+        compra_id = request.form.get('compra_id') or None
+        if compra_id and not pessoa_id:
+            compra = fetchone("SELECT pessoa_id FROM compras WHERE id=?", (compra_id,))
+            pessoa_id = compra['pessoa_id'] if compra else None
+        quantidade = fnum('quantidade_sacas') or fnum('quantidade')
         con = db()
-        con.execute("""INSERT INTO provas (compra_id,data,bebida,peneira,umidade,defeitos,aroma,corpo,acidez,docura,nota,classificacao,aprovado,observacao)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (request.form.get('compra_id') or None, request.form['data'], request.form.get('bebida'), request.form.get('peneira'), request.form.get('umidade'), request.form.get('defeitos'), request.form.get('aroma'), request.form.get('corpo'), request.form.get('acidez'), request.form.get('docura'), request.form.get('nota'), request.form.get('classificacao'), request.form.get('aprovado'), request.form.get('observacao')))
-        con.commit(); con.close(); flash('Prova registrada com classificação.')
+        con.execute("""INSERT INTO provas (pessoa_id,compra_id,data,cata,nome_cliente,nome_avulso,quantidade,quantidade_sacas,bebida,peneira,umidade,defeitos,aroma,corpo,acidez,docura,nota,classificacao,aprovado,observacao)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (pessoa_id, compra_id, request.form['data'], request.form.get('cata'), request.form.get('nome_cliente'), request.form.get('nome_avulso'), quantidade, quantidade, request.form.get('bebida'), request.form.get('peneira'), request.form.get('umidade'), request.form.get('defeitos'), request.form.get('aroma'), request.form.get('corpo'), request.form.get('acidez'), request.form.get('docura'), request.form.get('nota'), request.form.get('classificacao'), request.form.get('aprovado') or 'Em análise', request.form.get('observacao')))
+        con.commit(); con.close(); flash('Prova registrada e salva no painel do cliente quando tiver cadastro selecionado.')
         return redirect(url_for('provas'))
-    rows = fetchall("""SELECT provas.*, compras.lote, compras.tipo_cafe, pessoas.nome pessoa_nome FROM provas LEFT JOIN compras ON compras.id = provas.compra_id LEFT JOIN pessoas ON pessoas.id = compras.pessoa_id ORDER BY provas.id DESC""")
-    return render_template('provas.html', provas=rows, compras=compras_rows, hoje=today())
+    rows = fetchall("""SELECT provas.*, compras.lote, compras.tipo_cafe, pessoas.nome pessoa_nome FROM provas LEFT JOIN compras ON compras.id = provas.compra_id LEFT JOIN pessoas ON pessoas.id = COALESCE(provas.pessoa_id, compras.pessoa_id) ORDER BY provas.id DESC""")
+    return render_template('provas.html', provas=rows, compras=compras_rows, pessoas=pessoas_rows, hoje=today(), tipos_cafe=TIPOS_CAFE)
 
 
 @app.route('/vendas', methods=['GET','POST'])
 def vendas():
-    pessoas_rows = fetchall("SELECT * FROM pessoas WHERE tipo IN ('Cliente','Cliente e Fornecedor') ORDER BY nome")
+    pessoas_rows = get_pessoas_choices("tipo IN ('Cliente','Cliente e Fornecedor')")
     lotes = fetchall(f"""SELECT c.*, p.nome pessoa_nome, ({lote_estoque_expr()}) estoque_lote FROM compras c LEFT JOIN pessoas p ON p.id=c.pessoa_id WHERE ({lote_estoque_expr()}) > 0 ORDER BY c.id DESC""")
     if request.method == 'POST':
         qtd, valor_saca = fnum('quantidade_sacas'), fnum('valor_saca')
         compra_id = request.form.get('compra_id') or None
         compra = fetchone("SELECT * FROM compras WHERE id=?", (compra_id,)) if compra_id else None
         custo_saca = float(compra['valor_saca']) if compra else fnum('custo_saca')
-        total = qtd * valor_saca
+        subtotal = qtd * valor_saca
+        taxa, meses = fnum('juros_percentual'), fnum('meses_atraso')
+        juros = subtotal * (taxa/100) * meses
+        total = subtotal + juros
         lucro = (valor_saca - custo_saca) * qtd
         lote = request.form.get('lote') or (compra['lote'] if compra else '')
         tipo_cafe = request.form.get('tipo_cafe') or (compra['tipo_cafe'] if compra else '')
         con = db(); cur = con.cursor()
-        cur.execute("""INSERT INTO vendas (pessoa_id,compra_id,data,lote,tipo_cafe,quantidade_sacas,valor_saca,valor_total,custo_saca,lucro_total,status_recebimento,forma_pagamento,observacao)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (request.form.get('pessoa_id') or None, compra_id, request.form['data'], lote, tipo_cafe, qtd, valor_saca, total, custo_saca, lucro, request.form.get('status_recebimento'), request.form.get('forma_pagamento'), request.form.get('observacao')))
+        cur.execute("""INSERT INTO vendas (pessoa_id,compra_id,data,lote,tipo_cafe,quantidade_sacas,valor_saca,subtotal_cafe,juros_percentual,meses_atraso,valor_juros,valor_total,custo_saca,lucro_total,status_recebimento,forma_pagamento,observacao)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (request.form.get('pessoa_id') or None, compra_id, request.form['data'], lote, tipo_cafe, qtd, valor_saca, subtotal, taxa, meses, juros, total, custo_saca, lucro, request.form.get('status_recebimento'), request.form.get('forma_pagamento'), request.form.get('observacao')))
         venda_id = cur.lastrowid
         cur.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
                     (request.form['data'], 'Entrada', f"Venda de café - {lote or venda_id}", 'Venda de café', total, request.form.get('status_recebimento'), f"venda:{venda_id}"))
-        con.commit(); con.close(); flash('Venda lançada com cálculo de lucro automático.')
+        con.commit(); con.close(); update_compra_status(compra_id)
+        flash('Venda lançada com lucro, juros e status de estoque atualizados.')
         return redirect(url_for('vendas'))
     rows = fetchall("""SELECT vendas.*, pessoas.nome pessoa_nome FROM vendas LEFT JOIN pessoas ON pessoas.id = vendas.pessoa_id ORDER BY vendas.id DESC""")
-    return render_template('vendas.html', vendas=rows, pessoas=pessoas_rows, lotes=lotes, hoje=today())
+    return render_template('vendas.html', vendas=rows, pessoas=pessoas_rows, lotes=lotes, hoje=today(), tipos_cafe=TIPOS_CAFE)
+
+
+@app.route('/vendas/<int:venda_id>/editar', methods=['GET','POST'])
+def editar_venda(venda_id):
+    venda = fetchone("SELECT * FROM vendas WHERE id=?", (venda_id,))
+    if not venda:
+        flash('Venda não encontrada.'); return redirect(url_for('vendas'))
+    old_compra_id = venda['compra_id']
+    pessoas_rows = get_pessoas_choices("tipo IN ('Cliente','Cliente e Fornecedor')")
+    lotes = fetchall(f"""SELECT c.*, p.nome pessoa_nome, ({lote_estoque_expr()}) estoque_lote FROM compras c LEFT JOIN pessoas p ON p.id=c.pessoa_id WHERE ({lote_estoque_expr()}) > 0 OR c.id=? ORDER BY c.id DESC""", (old_compra_id or 0,))
+    if request.method == 'POST':
+        qtd, valor_saca = fnum('quantidade_sacas'), fnum('valor_saca')
+        compra_id = request.form.get('compra_id') or None
+        compra = fetchone("SELECT * FROM compras WHERE id=?", (compra_id,)) if compra_id else None
+        custo_saca = float(compra['valor_saca']) if compra else fnum('custo_saca')
+        subtotal = qtd * valor_saca
+        taxa, meses = fnum('juros_percentual'), fnum('meses_atraso')
+        juros = subtotal * (taxa/100) * meses
+        total = subtotal + juros
+        lucro = (valor_saca - custo_saca) * qtd
+        lote = request.form.get('lote') or (compra['lote'] if compra else '')
+        tipo_cafe = request.form.get('tipo_cafe') or (compra['tipo_cafe'] if compra else '')
+        con = db(); con.execute("""UPDATE vendas SET pessoa_id=?, compra_id=?, data=?, lote=?, tipo_cafe=?, quantidade_sacas=?, valor_saca=?, subtotal_cafe=?, juros_percentual=?, meses_atraso=?, valor_juros=?, valor_total=?, custo_saca=?, lucro_total=?, status_recebimento=?, forma_pagamento=?, observacao=? WHERE id=?""",
+            (request.form.get('pessoa_id') or None, compra_id, request.form['data'], lote, tipo_cafe, qtd, valor_saca, subtotal, taxa, meses, juros, total, custo_saca, lucro, request.form.get('status_recebimento'), request.form.get('forma_pagamento'), request.form.get('observacao'), venda_id))
+        con.commit(); con.close()
+        update_financeiro(f"venda:{venda_id}", request.form['data'], 'Entrada', f"Venda de café - {lote or venda_id}", 'Venda de café', total, request.form.get('status_recebimento'))
+        update_compra_status(old_compra_id); update_compra_status(compra_id)
+        flash('Venda atualizada. Preço, juros, lucro e estoque recalculados.')
+        return redirect(url_for('vendas'))
+    return render_template('editar_venda.html', venda=venda, pessoas=pessoas_rows, lotes=lotes, tipos_cafe=TIPOS_CAFE)
+
+
+@app.route('/vendas/<int:venda_id>/excluir', methods=['POST'])
+def excluir_venda(venda_id):
+    venda = fetchone("SELECT compra_id FROM vendas WHERE id=?", (venda_id,))
+    con = db(); con.execute("DELETE FROM financeiro WHERE origem=?", (f"venda:{venda_id}",)); con.execute("DELETE FROM vendas WHERE id=?", (venda_id,)); con.commit(); con.close()
+    if venda: update_compra_status(venda['compra_id'])
+    flash('Venda excluída e estoque recalculado.')
+    return redirect(url_for('vendas'))
 
 
 @app.route('/lotes')
 def lotes():
+    update_all_status()
     rows = fetchall(f"""SELECT c.*, p.nome pessoa_nome, ({lote_estoque_expr()}) estoque_lote,
         COALESCE((SELECT SUM(v.quantidade_sacas) FROM vendas v WHERE v.compra_id=c.id),0) vendido,
         COALESCE((SELECT SUM(v.lucro_total) FROM vendas v WHERE v.compra_id=c.id),0) lucro

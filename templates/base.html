@@ -26,7 +26,7 @@
 
     <nav>
       <a href="{{ url_for('index') }}">Painel</a>
-      <a href="{{ url_for('pessoas') }}">Pessoas</a>
+      <a href="{{ url_for('pessoas') }}">Pessoas</a><a href="{{ url_for('clientes') }}">Painel Clientes</a>
       <a href="{{ url_for('compras') }}">Compras</a>
       <a href="{{ url_for('provas') }}">Provas</a>
       <a href="{{ url_for('vendas') }}">Vendas</a>
@@ -47,5 +47,25 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+
+<script>
+document.addEventListener('input', function(e){
+  if(e.target.classList.contains('select-search')){
+    const sel=document.getElementById(e.target.dataset.target); if(!sel) return;
+    const q=e.target.value.toLowerCase();
+    [...sel.options].forEach((op,i)=>{op.hidden = i>0 && !op.text.toLowerCase().includes(q);});
+  }
+  if(e.target.closest('.calc-sacas')){
+    const form=e.target.closest('.calc-sacas');
+    const peso=parseFloat((form.querySelector('.peso')?.value||'0').replace(',','.'))||0;
+    const divisor=parseFloat((form.querySelector('.divisor')?.value||'60').replace(',','.'))||60;
+    const ajuste=parseFloat((form.querySelector('.ajuste')?.value||'0').replace(',','.'))||0;
+    const sacas=form.querySelector('.sacas');
+    if(sacas && (e.target.classList.contains('peso') || e.target.classList.contains('divisor') || e.target.classList.contains('ajuste'))){
+      sacas.value=((peso/divisor)+ajuste).toFixed(2);
+    }
+  }
+});
+</script>
 </body>
 </html>

@@ -1,3 +1,25 @@
 {% extends 'base.html' %}{% block content %}
-<h1>Clientes, fornecedores e produtores</h1><p class="subtitle">Cadastro completo com fazenda, documento, WhatsApp e histórico de negócio.</p><div class="card"><form method="post" class="form"><div><label>Tipo</label><select name="tipo"><option>Cliente</option><option>Fornecedor</option><option>Cliente e Fornecedor</option></select></div><div><label>Nome</label><input name="nome" required></div><div><label>CPF/CNPJ</label><input name="documento"></div><div><label>Telefone</label><input name="telefone"></div><div><label>WhatsApp</label><input name="whatsapp"></div><div><label>Cidade</label><input name="cidade"></div><div><label>Endereço</label><input name="endereco"></div><div><label>Fazenda/Sítio</label><input name="fazenda"></div><div class="span"><label>Observação</label><input name="observacao"></div><button class="btn">Salvar cadastro</button></form><form class="search" method="get"><input name="q" placeholder="Buscar nome, CPF/CNPJ, telefone ou cidade" value="{{ q }}"><button class="btn light">Buscar</button></form><table><tr><th>Tipo</th><th>Nome</th><th>CPF/CNPJ</th><th>WhatsApp</th><th>Cidade</th><th>Fazenda</th></tr>{% for p in pessoas %}<tr><td><span class="badge">{{ p.tipo }}</span></td><td>{{ p.nome }}</td><td>{{ p.documento or '-' }}</td><td>{{ p.whatsapp or p.telefone or '-' }}</td><td>{{ p.cidade or '-' }}</td><td>{{ p.fazenda or '-' }}</td></tr>{% endfor %}</table></div>
+<h1>Clientes, fornecedores e produtores</h1>
+<p class="subtitle">Cadastro completo com fazenda, documento, WhatsApp, painel do cliente, edição e exclusão.</p>
+<div class="quick"><a class="btn btn-panel-cliente" href="{{ url_for('clientes') }}">Abrir painéis dos clientes</a></div>
+<div class="card">
+  <form method="post" class="form">
+    <div><label>Tipo</label><select name="tipo"><option>Cliente</option><option>Fornecedor</option><option>Cliente e Fornecedor</option></select></div>
+    <div><label>Nome</label><input name="nome" required></div>
+    <div><label>CPF/CNPJ</label><input name="documento"></div>
+    <div><label>Telefone</label><input name="telefone"></div>
+    <div><label>WhatsApp</label><input name="whatsapp"></div>
+    <div><label>Cidade</label><input name="cidade"></div>
+    <div><label>Endereço</label><input name="endereco"></div>
+    <div><label>Fazenda/Sítio</label><input name="fazenda"></div>
+    <div class="span"><label>Observação</label><input name="observacao"></div>
+    <button class="btn">Salvar cadastro</button>
+  </form>
+  <form class="search" method="get"><input name="q" placeholder="Buscar nome, CPF/CNPJ, telefone ou cidade" value="{{ q }}"><button class="btn light">Buscar</button></form>
+  <table><tr><th>Tipo</th><th>Nome</th><th>WhatsApp</th><th>Cidade</th><th>Fazenda</th><th>Ações</th></tr>
+    {% for p in pessoas %}
+    <tr><td><span class="badge">{{ p.tipo }}</span></td><td>{{ p.nome }}</td><td>{{ p.whatsapp or p.telefone or '-' }}</td><td>{{ p.cidade or '-' }}</td><td>{{ p.fazenda or '-' }}</td><td class="actions"><a class="mini" href="{{ url_for('painel_cliente', pessoa_id=p.id) }}">Abrir painel</a><a class="mini" href="{{ url_for('editar_pessoa', pessoa_id=p.id) }}">Editar</a><form method="post" action="{{ url_for('excluir_pessoa', pessoa_id=p.id) }}" onsubmit="return confirm('Excluir este cadastro? O histórico será mantido sem vínculo.');"><button class="mini danger">Excluir</button></form></td></tr>
+    {% endfor %}
+  </table>
+</div>
 {% endblock %}
