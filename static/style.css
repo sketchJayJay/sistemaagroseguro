@@ -58,3 +58,4 @@ table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;
 .inline-form{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.inline-form input{width:115px;padding:8px}.inline-form button{padding:8px 10px}
 
 .search-card{margin-bottom:16px}.hint{color:var(--muted);font-size:13px;margin:8px 0 0}.search-card .search{margin:0}.search-card input{max-width:680px}
+.checkline{display:flex;align-items:center;gap:8px;background:#f4faf5;border:1px solid #d8e6d6;border-radius:13px;padding:12px;color:#193222;font-size:13px}.checkline input{width:auto}

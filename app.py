@@ -154,13 +154,28 @@ def init_db():
         status TEXT DEFAULT 'Pendente',
         origem TEXT
     );
+    CREATE TABLE IF NOT EXISTS adiantamentos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pessoa_id INTEGER NOT NULL,
+        data TEXT NOT NULL,
+        valor REAL NOT NULL DEFAULT 0,
+        taxa_juros REAL DEFAULT 0,
+        meses_atraso REAL DEFAULT 0,
+        valor_juros REAL DEFAULT 0,
+        valor_total REAL DEFAULT 0,
+        observacao TEXT,
+        status TEXT DEFAULT 'Aberto',
+        criado_em TEXT NOT NULL,
+        FOREIGN KEY(pessoa_id) REFERENCES pessoas(id)
+    );
     """)
     for table, cols in {
         'pessoas': [('documento','TEXT'),('whatsapp','TEXT'),('endereco','TEXT'),('fazenda','TEXT')],
         'compras': [('forma_pagamento','TEXT'),('frete','REAL DEFAULT 0'),('outras_despesas','REAL DEFAULT 0'),('origem_cafe','TEXT'),('status_lote',"TEXT DEFAULT 'Em estoque'"),('divisor_saca','REAL DEFAULT 60'),('ajuste_sacas','REAL DEFAULT 0')],
         'provas': [('pessoa_id','INTEGER'),('cata','TEXT'),('nome_cliente','TEXT'),('nome_avulso','TEXT'),('quantidade','REAL DEFAULT 0'),('quantidade_sacas','REAL DEFAULT 0'),('aroma','TEXT'),('corpo','TEXT'),('acidez','TEXT'),('docura','TEXT'),('aprovado',"TEXT DEFAULT 'Em análise'")],
         'vendas': [('compra_id','INTEGER'),('custo_saca','REAL DEFAULT 0'),('lucro_total','REAL DEFAULT 0'),('forma_pagamento','TEXT'),('subtotal_cafe','REAL DEFAULT 0'),('juros_percentual','REAL DEFAULT 0'),('meses_atraso','REAL DEFAULT 0'),('valor_juros','REAL DEFAULT 0')],
-        'financeiro': [('categoria','TEXT')]
+        'financeiro': [('categoria','TEXT')],
+        'adiantamentos': [('taxa_juros','REAL DEFAULT 0'),('meses_atraso','REAL DEFAULT 0'),('valor_juros','REAL DEFAULT 0'),('valor_total','REAL DEFAULT 0'),('observacao','TEXT'),('status',"TEXT DEFAULT 'Aberto'"),('criado_em','TEXT')]
     }.items():
         for column, definition in cols:
             add_column(cur, table, column, definition)
@@ -310,6 +325,66 @@ def clientes():
     rows = fetchall(sql, params)
     return render_template('clientes.html', clientes=rows, q=q)
 
+
+def calcular_adiantamento(valor, taxa, meses):
+    valor = float(valor or 0)
+    taxa = float(taxa or 0)
+    meses = float(meses or 0)
+    juros = valor * (taxa / 100) * meses
+    return juros, valor + juros
+
+
+@app.route('/clientes/<int:pessoa_id>/adiantamentos', methods=['POST'])
+def adicionar_adiantamento(pessoa_id):
+    pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
+    if not pessoa:
+        flash('Cliente não encontrado.'); return redirect(url_for('clientes'))
+    valor = fnum('valor')
+    taxa = fnum('taxa_juros')
+    meses = fnum('meses_atraso')
+    data = request.form.get('data') or today()
+    obs = request.form.get('observacao') or ''
+    juros, total = calcular_adiantamento(valor, taxa, meses)
+    if valor <= 0:
+        flash('Informe o valor que o cliente pegou.')
+        return redirect(url_for('painel_cliente', pessoa_id=pessoa_id))
+    con = db(); cur = con.cursor()
+    cur.execute("""INSERT INTO adiantamentos (pessoa_id,data,valor,taxa_juros,meses_atraso,valor_juros,valor_total,observacao,status,criado_em)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""", (pessoa_id, data, valor, taxa, meses, juros, total, obs, request.form.get('status') or 'Aberto', datetime.now().isoformat(timespec='seconds')))
+    aid = cur.lastrowid
+    if request.form.get('lancar_financeiro') == '1':
+        cur.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
+                    (data, 'Saída', f"Valor pego por {pessoa['nome']} - adiantamento #{aid}", 'Adiantamento ao cliente', valor, 'Pago', f"adiantamento:{aid}"))
+    con.commit(); con.close()
+    flash('Valor pego salvo no painel do cliente.')
+    return redirect(url_for('painel_cliente', pessoa_id=pessoa_id))
+
+
+@app.route('/adiantamentos/<int:adiantamento_id>/excluir', methods=['POST'])
+def excluir_adiantamento(adiantamento_id):
+    row = fetchone("SELECT * FROM adiantamentos WHERE id=?", (adiantamento_id,))
+    if not row:
+        flash('Registro não encontrado.'); return redirect(url_for('clientes'))
+    con = db()
+    con.execute("DELETE FROM financeiro WHERE origem=?", (f"adiantamento:{adiantamento_id}",))
+    con.execute("DELETE FROM adiantamentos WHERE id=?", (adiantamento_id,))
+    con.commit(); con.close()
+    flash('Valor pego excluído do painel.')
+    return redirect(url_for('painel_cliente', pessoa_id=row['pessoa_id']))
+
+
+@app.route('/adiantamentos/<int:adiantamento_id>/baixar', methods=['POST'])
+def baixar_adiantamento(adiantamento_id):
+    row = fetchone("SELECT * FROM adiantamentos WHERE id=?", (adiantamento_id,))
+    if not row:
+        flash('Registro não encontrado.'); return redirect(url_for('clientes'))
+    con = db()
+    con.execute("UPDATE adiantamentos SET status='Pago' WHERE id=?", (adiantamento_id,))
+    con.commit(); con.close()
+    flash('Adiantamento marcado como pago.')
+    return redirect(url_for('painel_cliente', pessoa_id=row['pessoa_id']))
+
+
 @app.route('/clientes/<int:pessoa_id>')
 def painel_cliente(pessoa_id):
     pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
@@ -327,10 +402,16 @@ def painel_cliente(pessoa_id):
     saldo_tipo = fetchall("""SELECT COALESCE(tipo_cafe,'Sem tipo') tipo, SUM(valor_total) valor, SUM(quantidade_sacas) sacas
         FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente' GROUP BY COALESCE(tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
     saldo_pendente = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))['v']
+    adiantamentos = fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? ORDER BY data DESC, id DESC", (pessoa_id,))
+    total_adiantamentos = fetchone("SELECT COALESCE(SUM(valor),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
+    juros_adiantamentos = fetchone("SELECT COALESCE(SUM(valor_juros),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
+    total_adiantamentos_juros = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
     juros = saldo_pendente * (taxa/100) * meses
     return render_template('cliente_painel.html', pessoa=pessoa, vendas=vendas_rows, compras=compras_rows, provas=provas_rows,
                            estoque_tipo=estoque_tipo, saldo_tipo=saldo_tipo, saldo_pendente=saldo_pendente,
-                           taxa=taxa, meses=meses, juros=juros, total_com_juros=saldo_pendente+juros, tipos_cafe=TIPOS_CAFE)
+                           taxa=taxa, meses=meses, juros=juros, total_com_juros=saldo_pendente+juros, tipos_cafe=TIPOS_CAFE,
+                           adiantamentos=adiantamentos, total_adiantamentos=total_adiantamentos,
+                           juros_adiantamentos=juros_adiantamentos, total_adiantamentos_juros=total_adiantamentos_juros, hoje=today())
 
 
 @app.route('/clientes/<int:pessoa_id>/aplicar-juros', methods=['POST'])
