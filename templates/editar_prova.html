@@ -1,0 +1,45 @@
+{% extends 'base.html' %}{% block content %}
+<h1>Editar prova</h1>
+<p class="subtitle">Altere os dados da prova. Ordem ajustada: nome, quantidade, bebida, cata e umidade.</p>
+<div class="card">
+  <form method="post" class="form">
+    <div><label>Data</label><input type="date" name="data" value="{{ prova.data }}" required></div>
+    <div><label>Filtrar cliente cadastrado</label><input type="search" class="select-search no-submit" data-target="pessoa_id" placeholder="Digite para filtrar"></div>
+    <div><label>Cliente cadastrado</label><select name="pessoa_id" id="pessoa_id"><option value="">Sem cadastro</option>{% for p in pessoas %}<option value="{{ p.id }}" {% if prova.pessoa_id==p.id %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}</select></div>
+    <div><label>Nome avulso</label><input name="nome_avulso" value="{{ prova.nome_avulso or '' }}" placeholder="Caso não esteja cadastrado"></div>
+
+    <div><label>Quantidade de saca</label><input type="number" step="0.01" name="quantidade_sacas" value="{{ prova.quantidade_sacas or prova.quantidade or 0 }}" placeholder="Ex: 10"></div>
+    <div><label>Bebida</label><input name="bebida" value="{{ prova.bebida or '' }}" placeholder="Ex: Duro riado, Rio com obs..."></div>
+    <div><label>Cata %</label><input name="cata" class="percent-auto" value="{{ prova.cata or '' }}" placeholder="Ex: 30"></div>
+    <div><label>Umidade %</label><input name="umidade" value="{{ prova.umidade or '' }}" placeholder="Ex: 12"></div>
+
+    <div><label>Compra/Lote</label><select name="compra_id"><option value="">Avulsa</option>{% for c in compras %}<option value="{{ c.id }}" {% if prova.compra_id==c.id %}selected{% endif %}>{{ c.lote or ('Compra ' ~ c.id) }} - {{ c.pessoa_nome or '' }}</option>{% endfor %}</select></div>
+    <div><label>Peneira</label><input name="peneira" value="{{ prova.peneira or '' }}"></div>
+    <div><label>Defeitos</label><input name="defeitos" value="{{ prova.defeitos or '' }}"></div>
+    <div><label>Aroma</label><input name="aroma" value="{{ prova.aroma or '' }}"></div>
+    <div><label>Corpo</label><input name="corpo" value="{{ prova.corpo or '' }}"></div>
+    <div><label>Acidez</label><input name="acidez" value="{{ prova.acidez or '' }}"></div>
+    <div><label>Doçura</label><input name="docura" value="{{ prova.docura or '' }}"></div>
+    <div><label>Nota final</label><input name="nota" value="{{ prova.nota or '' }}"></div>
+    <div><label>Classificação</label><input name="classificacao" value="{{ prova.classificacao or '' }}" placeholder="Comercial, especial..."></div>
+    <div><label>Resultado</label><select name="aprovado"><option {% if prova.aprovado=='Em análise' %}selected{% endif %}>Em análise</option><option {% if prova.aprovado=='Aprovado' %}selected{% endif %}>Aprovado</option><option {% if prova.aprovado=='Reprovado' %}selected{% endif %}>Reprovado</option><option {% if prova.aprovado=='Reavaliar' %}selected{% endif %}>Reavaliar</option></select></div>
+    <div class="span"><label>Observação</label><input name="observacao" value="{{ prova.observacao or '' }}" placeholder="Observações da bebida/prova"></div>
+    <button class="btn">Salvar alterações</button>
+    <a class="btn light" href="{{ url_for('provas') }}">Voltar</a>
+  </form>
+</div>
+<script>
+document.querySelectorAll(".no-submit, .select-search").forEach(el=>{ el.addEventListener("keydown", e=>{ if(e.key==="Enter") e.preventDefault(); }); });
+document.querySelectorAll(".percent-auto").forEach(el=>{
+  el.addEventListener("blur", ()=>{
+    let v=(el.value||"").trim();
+    if(!v) return;
+    let n=v.replace("%","").replace(",",".").trim();
+    if(!isNaN(n) && n!==""){
+      let num=parseFloat(n);
+      el.value=(Number.isInteger(num)?String(num.toFixed(0)):String(num).replace(".",","))+"%";
+    }
+  });
+});
+</script>
+{% endblock %}

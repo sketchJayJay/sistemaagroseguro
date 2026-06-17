@@ -12,6 +12,21 @@ DB_PATH = DB_DIR / "controle_cafe.sqlite3"
 TIPOS_CAFE = ["Duro", "Duro riado", "Duro riado Rio", "Riado rio", "Rio", "Escolha"]
 
 
+def normalizar_cata(valor):
+    """Transforma cata digitada como 30 em 30%, mantendo textos como Cata 01."""
+    valor = (valor or '').strip()
+    if not valor:
+        return ''
+    limpo = valor.replace('%', '').replace(',', '.').strip()
+    try:
+        numero = float(limpo)
+        if numero.is_integer():
+            return f"{int(numero)}%"
+        return (f"{numero:.2f}".replace('.', ',').rstrip('0').rstrip(',') + '%')
+    except Exception:
+        return valor
+
+
 def br_money(value):
     try:
         return f"R$ {float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -285,8 +300,7 @@ def excluir_pessoa(pessoa_id):
 @app.route('/clientes')
 def clientes():
     q = request.args.get('q','').strip()
-    sql = """SELECT * FROM pessoas
-             WHERE tipo IN ('Cliente','Cliente e Fornecedor')"""
+    sql = "SELECT * FROM pessoas WHERE 1=1"
     params = []
     if q:
         sql += " AND (nome LIKE ? OR documento LIKE ? OR telefone LIKE ? OR whatsapp LIKE ? OR cidade LIKE ? OR fazenda LIKE ?)"
@@ -319,9 +333,29 @@ def painel_cliente(pessoa_id):
                            taxa=taxa, meses=meses, juros=juros, total_com_juros=saldo_pendente+juros, tipos_cafe=TIPOS_CAFE)
 
 
+@app.route('/clientes/<int:pessoa_id>/aplicar-juros', methods=['POST'])
+def aplicar_juros_cliente(pessoa_id):
+    pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
+    if not pessoa:
+        flash('Cliente não encontrado.'); return redirect(url_for('clientes'))
+    taxa = fnum('taxa_juros')
+    meses = fnum('meses_atraso')
+    saldo = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))['v']
+    juros = float(saldo or 0) * (taxa/100) * meses
+    if juros <= 0:
+        flash('Nenhum juros para aplicar. Confira taxa, meses e saldo pendente.')
+        return redirect(url_for('painel_cliente', pessoa_id=pessoa_id, taxa_juros=taxa, meses_atraso=meses))
+    con = db()
+    con.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
+                (today(), 'Entrada', f"Juros de atraso - {pessoa['nome']} ({taxa}% x {meses} mês(es))", 'Juros de atraso', juros, 'Pendente', f"juros:{pessoa_id}:{datetime.now().timestamp()}"))
+    con.commit(); con.close()
+    flash('Juros lançado no financeiro como entrada pendente.')
+    return redirect(url_for('painel_cliente', pessoa_id=pessoa_id, taxa_juros=taxa, meses_atraso=meses))
+
+
 @app.route('/compras', methods=['GET','POST'])
 def compras():
-    pessoas_rows = get_pessoas_choices("tipo IN ('Fornecedor','Cliente e Fornecedor')")
+    pessoas_rows = get_pessoas_choices("")
     if request.method == 'POST':
         peso, divisor, ajuste, informada = fnum('peso_kg'), fnum('divisor_saca') or 60, fnum('ajuste_sacas'), fnum('quantidade_sacas')
         qtd = calc_sacas(peso, divisor, ajuste, informada)
@@ -347,7 +381,7 @@ def editar_compra(compra_id):
     compra = fetchone("SELECT * FROM compras WHERE id=?", (compra_id,))
     if not compra:
         flash('Compra não encontrada.'); return redirect(url_for('compras'))
-    pessoas_rows = get_pessoas_choices("tipo IN ('Fornecedor','Cliente e Fornecedor')")
+    pessoas_rows = get_pessoas_choices("")
     if request.method == 'POST':
         peso, divisor, ajuste, informada = fnum('peso_kg'), fnum('divisor_saca') or 60, fnum('ajuste_sacas'), fnum('quantidade_sacas')
         qtd = calc_sacas(peso, divisor, ajuste, informada)
@@ -388,19 +422,102 @@ def provas():
             compra = fetchone("SELECT pessoa_id FROM compras WHERE id=?", (compra_id,))
             pessoa_id = compra['pessoa_id'] if compra else None
         quantidade = fnum('quantidade_sacas') or fnum('quantidade')
+        cata = normalizar_cata(request.form.get('cata'))
+        nome_avulso = (request.form.get('nome_avulso') or '').strip()
+        bebida = (request.form.get('bebida') or '').strip()
+        observacao = (request.form.get('observacao') or '').strip()
+        # Evita salvar prova em branco quando o usuário aperta Enter em campo de busca.
+        if not any([pessoa_id, compra_id, cata, nome_avulso, quantidade, bebida, observacao, request.form.get('nota'), request.form.get('classificacao')]):
+            flash('Nenhuma prova foi salva: preencha cliente/nome avulso, cata, quantidade ou bebida antes de salvar.')
+            return redirect(url_for('provas'))
         con = db()
         con.execute("""INSERT INTO provas (pessoa_id,compra_id,data,cata,nome_cliente,nome_avulso,quantidade,quantidade_sacas,bebida,peneira,umidade,defeitos,aroma,corpo,acidez,docura,nota,classificacao,aprovado,observacao)
                      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (pessoa_id, compra_id, request.form['data'], request.form.get('cata'), request.form.get('nome_cliente'), request.form.get('nome_avulso'), quantidade, quantidade, request.form.get('bebida'), request.form.get('peneira'), request.form.get('umidade'), request.form.get('defeitos'), request.form.get('aroma'), request.form.get('corpo'), request.form.get('acidez'), request.form.get('docura'), request.form.get('nota'), request.form.get('classificacao'), request.form.get('aprovado') or 'Em análise', request.form.get('observacao')))
+                    (pessoa_id, compra_id, request.form['data'], cata, request.form.get('nome_cliente'), nome_avulso, quantidade, quantidade, bebida, request.form.get('peneira'), request.form.get('umidade'), request.form.get('defeitos'), request.form.get('aroma'), request.form.get('corpo'), request.form.get('acidez'), request.form.get('docura'), request.form.get('nota'), request.form.get('classificacao'), request.form.get('aprovado') or 'Em análise', observacao))
         con.commit(); con.close(); flash('Prova registrada e salva no painel do cliente quando tiver cadastro selecionado.')
         return redirect(url_for('provas'))
     rows = fetchall("""SELECT provas.*, compras.lote, compras.tipo_cafe, pessoas.nome pessoa_nome FROM provas LEFT JOIN compras ON compras.id = provas.compra_id LEFT JOIN pessoas ON pessoas.id = COALESCE(provas.pessoa_id, compras.pessoa_id) ORDER BY provas.id DESC""")
     return render_template('provas.html', provas=rows, compras=compras_rows, pessoas=pessoas_rows, hoje=today(), tipos_cafe=TIPOS_CAFE)
 
 
+@app.route('/provas/<int:prova_id>/editar', methods=['GET','POST'])
+def editar_prova(prova_id):
+    prova = fetchone("SELECT * FROM provas WHERE id=?", (prova_id,))
+    if not prova:
+        flash('Prova não encontrada.')
+        return redirect(url_for('provas'))
+    compras_rows = fetchall("""SELECT compras.*, pessoas.nome pessoa_nome FROM compras LEFT JOIN pessoas ON pessoas.id = compras.pessoa_id ORDER BY compras.id DESC""")
+    pessoas_rows = get_pessoas_choices("")
+    if request.method == 'POST':
+        pessoa_id = request.form.get('pessoa_id') or None
+        compra_id = request.form.get('compra_id') or None
+        if compra_id and not pessoa_id:
+            compra = fetchone("SELECT pessoa_id FROM compras WHERE id=?", (compra_id,))
+            pessoa_id = compra['pessoa_id'] if compra else None
+        quantidade = fnum('quantidade_sacas') or fnum('quantidade')
+        cata = normalizar_cata(request.form.get('cata'))
+        con = db()
+        con.execute("""UPDATE provas SET pessoa_id=?, compra_id=?, data=?, cata=?, nome_cliente=?, nome_avulso=?, quantidade=?, quantidade_sacas=?, bebida=?, peneira=?, umidade=?, defeitos=?, aroma=?, corpo=?, acidez=?, docura=?, nota=?, classificacao=?, aprovado=?, observacao=? WHERE id=?""",
+                    (pessoa_id, compra_id, request.form['data'], cata, request.form.get('nome_cliente'), request.form.get('nome_avulso'), quantidade, quantidade, request.form.get('bebida'), request.form.get('peneira'), request.form.get('umidade'), request.form.get('defeitos'), request.form.get('aroma'), request.form.get('corpo'), request.form.get('acidez'), request.form.get('docura'), request.form.get('nota'), request.form.get('classificacao'), request.form.get('aprovado') or 'Em análise', request.form.get('observacao'), prova_id))
+        con.commit(); con.close()
+        flash('Prova atualizada com sucesso.')
+        return redirect(url_for('provas'))
+    return render_template('editar_prova.html', prova=prova, compras=compras_rows, pessoas=pessoas_rows, tipos_cafe=TIPOS_CAFE)
+
+
+@app.route('/provas/<int:prova_id>/excluir', methods=['POST'])
+def excluir_prova(prova_id):
+    prova = fetchone("SELECT * FROM provas WHERE id=?", (prova_id,))
+    if not prova:
+        flash('Prova não encontrada.')
+        return redirect(url_for('provas'))
+    if prova['compra_id']:
+        flash('Essa prova já virou compra. Para evitar bagunça no estoque, exclua ou edite a compra vinculada primeiro.')
+        return redirect(url_for('provas'))
+    con = db()
+    con.execute("DELETE FROM provas WHERE id=?", (prova_id,))
+    con.commit(); con.close()
+    flash('Prova excluída com sucesso.')
+    return redirect(url_for('provas'))
+
+
+@app.route('/provas/<int:prova_id>/transformar-compra', methods=['POST'])
+def prova_para_compra(prova_id):
+    prova = fetchone("SELECT * FROM provas WHERE id=?", (prova_id,))
+    if not prova:
+        flash('Prova não encontrada.'); return redirect(url_for('provas'))
+    pessoa_id = prova['pessoa_id']
+    valor_saca = fnum('valor_saca')
+    qtd = float(prova['quantidade_sacas'] or prova['quantidade'] or 0)
+    if not pessoa_id:
+        nome = prova['nome_avulso'] or prova['nome_cliente'] or 'Cliente avulso'
+        con = db(); cur = con.cursor()
+        cur.execute("INSERT INTO pessoas (tipo,nome,criado_em) VALUES (?,?,?)", ('Cliente e Fornecedor', nome, datetime.now().isoformat()))
+        pessoa_id = cur.lastrowid
+        cur.execute("UPDATE provas SET pessoa_id=? WHERE id=?", (pessoa_id, prova_id))
+        con.commit(); con.close()
+    if qtd <= 0 or valor_saca <= 0:
+        flash('Informe quantidade na prova e valor por saca para transformar em compra.')
+        return redirect(url_for('provas'))
+    lote = request.form.get('lote') or f"Prova {prova_id}"
+    tipo = prova['bebida'] or request.form.get('tipo_cafe')
+    total = qtd * valor_saca
+    con = db(); cur = con.cursor()
+    cur.execute("""INSERT INTO compras (pessoa_id,data,lote,tipo_cafe,quantidade_sacas,peso_kg,divisor_saca,ajuste_sacas,valor_saca,valor_total,status_pagamento,forma_pagamento,status_lote,observacao)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (pessoa_id, today(), lote, tipo, qtd, 0, 60, 0, valor_saca, total, request.form.get('status_pagamento') or 'Pendente', request.form.get('forma_pagamento'), 'Em estoque', f'Compra gerada pela prova #{prova_id}'))
+    compra_id = cur.lastrowid
+    cur.execute("UPDATE provas SET compra_id=?, aprovado='Aprovado' WHERE id=?", (compra_id, prova_id))
+    cur.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
+                (today(), 'Saída', f'Compra de café - {lote}', 'Compra de café', total, request.form.get('status_pagamento') or 'Pendente', f'compra:{compra_id}'))
+    con.commit(); con.close()
+    flash('Prova transformada em compra e enviada para o estoque do cliente.')
+    return redirect(url_for('painel_cliente', pessoa_id=pessoa_id))
+
+
 @app.route('/vendas', methods=['GET','POST'])
 def vendas():
-    pessoas_rows = get_pessoas_choices("tipo IN ('Cliente','Cliente e Fornecedor')")
+    pessoas_rows = get_pessoas_choices("")
     lotes = fetchall(f"""SELECT c.*, p.nome pessoa_nome, ({lote_estoque_expr()}) estoque_lote FROM compras c LEFT JOIN pessoas p ON p.id=c.pessoa_id WHERE ({lote_estoque_expr()}) > 0 ORDER BY c.id DESC""")
     if request.method == 'POST':
         qtd, valor_saca = fnum('quantidade_sacas'), fnum('valor_saca')
@@ -414,6 +531,12 @@ def vendas():
         lucro = (valor_saca - custo_saca) * qtd
         lote = request.form.get('lote') or (compra['lote'] if compra else '')
         tipo_cafe = request.form.get('tipo_cafe') or (compra['tipo_cafe'] if compra else '')
+        if compra_id:
+            estoque_row = fetchone(f"SELECT ({lote_estoque_expr()}) estoque FROM compras c WHERE c.id=?", (compra_id,))
+            estoque_atual = float(estoque_row['estoque'] or 0) if estoque_row else 0
+            if qtd > estoque_atual + 0.0001:
+                flash(f'Não dá para vender {br_num(qtd)} sacas. Esse lote tem apenas {br_num(estoque_atual)} sacas disponíveis.')
+                return redirect(url_for('vendas'))
         con = db(); cur = con.cursor()
         cur.execute("""INSERT INTO vendas (pessoa_id,compra_id,data,lote,tipo_cafe,quantidade_sacas,valor_saca,subtotal_cafe,juros_percentual,meses_atraso,valor_juros,valor_total,custo_saca,lucro_total,status_recebimento,forma_pagamento,observacao)
                      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -434,7 +557,7 @@ def editar_venda(venda_id):
     if not venda:
         flash('Venda não encontrada.'); return redirect(url_for('vendas'))
     old_compra_id = venda['compra_id']
-    pessoas_rows = get_pessoas_choices("tipo IN ('Cliente','Cliente e Fornecedor')")
+    pessoas_rows = get_pessoas_choices("")
     lotes = fetchall(f"""SELECT c.*, p.nome pessoa_nome, ({lote_estoque_expr()}) estoque_lote FROM compras c LEFT JOIN pessoas p ON p.id=c.pessoa_id WHERE ({lote_estoque_expr()}) > 0 OR c.id=? ORDER BY c.id DESC""", (old_compra_id or 0,))
     if request.method == 'POST':
         qtd, valor_saca = fnum('quantidade_sacas'), fnum('valor_saca')
@@ -448,6 +571,15 @@ def editar_venda(venda_id):
         lucro = (valor_saca - custo_saca) * qtd
         lote = request.form.get('lote') or (compra['lote'] if compra else '')
         tipo_cafe = request.form.get('tipo_cafe') or (compra['tipo_cafe'] if compra else '')
+        if compra_id:
+            estoque_row = fetchone(f"SELECT ({lote_estoque_expr()}) estoque FROM compras c WHERE c.id=?", (compra_id,))
+            estoque_atual = float(estoque_row['estoque'] or 0) if estoque_row else 0
+            # se estiver editando a mesma venda/lote, soma a quantidade antiga para calcular o disponível real
+            if str(compra_id) == str(old_compra_id or ''):
+                estoque_atual += float(venda['quantidade_sacas'] or 0)
+            if qtd > estoque_atual + 0.0001:
+                flash(f'Não dá para salvar. Disponível real do lote: {br_num(estoque_atual)} sacas.')
+                return redirect(url_for('editar_venda', venda_id=venda_id))
         con = db(); con.execute("""UPDATE vendas SET pessoa_id=?, compra_id=?, data=?, lote=?, tipo_cafe=?, quantidade_sacas=?, valor_saca=?, subtotal_cafe=?, juros_percentual=?, meses_atraso=?, valor_juros=?, valor_total=?, custo_saca=?, lucro_total=?, status_recebimento=?, forma_pagamento=?, observacao=? WHERE id=?""",
             (request.form.get('pessoa_id') or None, compra_id, request.form['data'], lote, tipo_cafe, qtd, valor_saca, subtotal, taxa, meses, juros, total, custo_saca, lucro, request.form.get('status_recebimento'), request.form.get('forma_pagamento'), request.form.get('observacao'), venda_id))
         con.commit(); con.close()
