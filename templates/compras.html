@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% block content %}
-<h1>Compras de café</h1><p class="subtitle">Peso dividido por saca, ajuste manual, estoque por lote e edição/exclusão.</p>
+<h1>Compras de café</h1><p class="subtitle">Peso dividido por saca, ajuste manual, estoque por lote, venda parcial e histórico do que já saiu.</p>
 <div class="card">
   <form method="post" class="form calc-sacas">
     <div><label>Data</label><input type="date" name="data" value="{{ hoje }}" required></div>
@@ -21,8 +21,14 @@
     <div class="span"><label>Observação</label><input name="observacao"></div>
     <button class="btn">Lançar compra</button>
   </form>
-  <table><tr><th>Data</th><th>Fornecedor</th><th>Lote</th><th>Tipo</th><th>Peso</th><th>Sacas</th><th>Valor/saca</th><th>Total</th><th>Status</th><th>Ações</th></tr>
-  {% for c in compras %}<tr><td>{{ c.data }}</td><td>{{ c.pessoa_nome or '-' }}</td><td>{{ c.lote or '-' }}</td><td>{{ c.tipo_cafe or '-' }}</td><td>{{ c.peso_kg|num }} kg</td><td>{{ c.quantidade_sacas|num }}</td><td>{{ c.valor_saca|money }}</td><td>{{ c.valor_total|money }}</td><td><span class="badge {% if c.status_lote in ['Em estoque','Vendido parcial'] %}ok{% endif %}">{{ c.status_lote or c.status_pagamento }}</span></td><td class="actions"><a class="mini" href="{{ url_for('recibo', tipo='compra', item_id=c.id) }}" target="_blank">Recibo</a><a class="mini" href="{{ url_for('editar_compra', compra_id=c.id) }}">Editar</a><form method="post" action="{{ url_for('excluir_compra', compra_id=c.id) }}" onsubmit="return confirm('Excluir compra? Isso também remove vendas e provas ligadas a ela.');"><button class="mini danger">Excluir</button></form></td></tr>{% endfor %}
+  <table><tr><th>Data</th><th>Fornecedor</th><th>Lote</th><th>Tipo</th><th>Comprado</th><th>Vendido</th><th>Restante</th><th>Valor/saca</th><th>Total compra</th><th>Status</th><th>Ações</th></tr>
+  {% for c in compras %}<tr>
+    <td>{{ c.data }}</td><td>{{ c.pessoa_nome or '-' }}</td><td>{{ c.lote or '-' }}</td><td>{{ c.tipo_cafe or '-' }}</td>
+    <td>{{ c.quantidade_sacas|num }}</td><td>{{ c.vendido|num }}</td><td><b>{{ c.estoque_lote|num }}</b></td>
+    <td>{{ c.valor_saca|money }}</td><td>{{ c.valor_total|money }}</td>
+    <td><span class="badge {% if c.estoque_lote>0 %}ok{% endif %}">{% if c.estoque_lote<=0 %}Vendido{% elif c.vendido>0 %}Vendido parcial{% else %}{{ c.status_lote or c.status_pagamento }}{% endif %}</span></td>
+    <td class="actions"><a class="mini" href="{{ url_for('recibo', tipo='compra', item_id=c.id) }}" target="_blank">Recibo compra</a><a class="mini" href="{{ url_for('historico_lote', compra_id=c.id) }}" target="_blank">Histórico vendas</a><a class="mini" href="{{ url_for('editar_compra', compra_id=c.id) }}">Editar</a><form method="post" action="{{ url_for('excluir_compra', compra_id=c.id) }}" onsubmit="return confirm('Excluir compra? Isso também remove vendas e provas ligadas a ela.');"><button class="mini danger">Excluir</button></form></td>
+  </tr>{% endfor %}
   </table>
 </div>
 {% endblock %}

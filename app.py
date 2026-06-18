@@ -351,6 +351,29 @@ def atualizar_adiantamentos_abertos(pessoa_id=None):
             pass
 
 
+
+
+def get_lote_historico(compra_id):
+    """Resumo completo de um lote/compra com vendas parciais e saldo restante."""
+    compra = fetchone(f"""SELECT c.*, p.nome pessoa_nome, p.documento, p.telefone, p.whatsapp, p.cidade, p.fazenda,
+        ({lote_estoque_expr()}) estoque_lote,
+        COALESCE((SELECT SUM(v.quantidade_sacas) FROM vendas v WHERE v.compra_id=c.id),0) vendido,
+        COALESCE((SELECT SUM(v.valor_total) FROM vendas v WHERE v.compra_id=c.id),0) valor_vendido,
+        COALESCE((SELECT SUM(v.lucro_total) FROM vendas v WHERE v.compra_id=c.id),0) lucro_total_lote
+        FROM compras c LEFT JOIN pessoas p ON p.id=c.pessoa_id WHERE c.id=?""", (compra_id,))
+    if not compra:
+        return None
+    vendas_lote = fetchall("""SELECT v.*, p.nome pessoa_nome
+        FROM vendas v LEFT JOIN pessoas p ON p.id=v.pessoa_id
+        WHERE v.compra_id=? ORDER BY v.data ASC, v.id ASC""", (compra_id,))
+    qtd_original = float(compra['quantidade_sacas'] or 0)
+    vendido = float(compra['vendido'] or 0)
+    restante = float(compra['estoque_lote'] or 0)
+    valor_vendido = float(compra['valor_vendido'] or 0)
+    texto = f"""Café Boa Vista\nHistórico do lote\n\nCliente/fornecedor: {compra['pessoa_nome'] or 'Sem cadastro'}\nLote: {compra['lote'] or ('Lote ' + str(compra['id']))}\nTipo: {compra['tipo_cafe'] or '-'}\nComprado: {br_num(qtd_original)} sacas\nVendido parcialmente: {br_num(vendido)} sacas\nRestante: {br_num(restante)} sacas\nValor vendido: {br_money(valor_vendido)}"""
+    return dict(compra=compra, vendas=vendas_lote, qtd_original=qtd_original, vendido=vendido,
+                restante=restante, valor_vendido=valor_vendido, texto_whatsapp=texto, hoje=today())
+
 def lote_estoque_expr():
     return """c.quantidade_sacas - COALESCE((SELECT SUM(v.quantidade_sacas) FROM vendas v WHERE v.compra_id=c.id),0)"""
 
@@ -601,7 +624,10 @@ def compras():
                     (request.form['data'], 'Saída', f"Compra de café - {lote}", 'Compra de café', total, request.form.get('status_pagamento'), f"compra:{compra_id}"))
         con.commit(); con.close(); log_acao('Compra lançada', 'compra', compra_id, f"{lote} - {br_money(total)}"); flash('Compra lançada. Sacas calculadas, lote, estoque e financeiro atualizados.')
         return redirect(url_for('compras'))
-    rows = fetchall("""SELECT compras.*, pessoas.nome pessoa_nome FROM compras LEFT JOIN pessoas ON pessoas.id = compras.pessoa_id ORDER BY compras.id DESC""")
+    rows = fetchall(f"""SELECT c.*, pessoas.nome pessoa_nome, ({lote_estoque_expr()}) estoque_lote,
+        COALESCE((SELECT SUM(v.quantidade_sacas) FROM vendas v WHERE v.compra_id=c.id),0) vendido,
+        COALESCE((SELECT SUM(v.valor_total) FROM vendas v WHERE v.compra_id=c.id),0) valor_vendido
+        FROM compras c LEFT JOIN pessoas ON pessoas.id = c.pessoa_id ORDER BY c.id DESC""")
     return render_template('compras.html', compras=rows, pessoas=pessoas_rows, hoje=today(), tipos_cafe=TIPOS_CAFE)
 
 
@@ -779,8 +805,13 @@ def vendas():
         cur.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
                     (request.form['data'], 'Entrada', f"Venda de café - {lote or venda_id}", 'Venda de café', total, request.form.get('status_recebimento'), f"venda:{venda_id}"))
         con.commit(); con.close(); update_compra_status(compra_id)
+        restante_msg = ''
+        if compra_id:
+            resto = fetchone(f"SELECT ({lote_estoque_expr()}) estoque FROM compras c WHERE c.id=?", (compra_id,))
+            restante = float(resto['estoque'] or 0) if resto else 0
+            restante_msg = f' Restam {br_num(restante)} sacas neste lote.' if restante > 0.0001 else ' Esse lote foi vendido totalmente.'
         log_acao('Venda lançada', 'venda', venda_id, f"{lote} - {br_money(total)}")
-        flash('Venda lançada com lucro, juros e status de estoque atualizados.')
+        flash('Venda lançada com lucro, juros e status de estoque atualizados.' + restante_msg)
         return redirect(url_for('vendas'))
     rows = fetchall("""SELECT vendas.*, pessoas.nome pessoa_nome FROM vendas LEFT JOIN pessoas ON pessoas.id = vendas.pessoa_id ORDER BY vendas.id DESC""")
     return render_template('vendas.html', vendas=rows, pessoas=pessoas_rows, lotes=lotes, hoje=today(), tipos_cafe=TIPOS_CAFE)
@@ -844,6 +875,15 @@ def lotes():
         COALESCE((SELECT SUM(v.lucro_total) FROM vendas v WHERE v.compra_id=c.id),0) lucro
         FROM compras c LEFT JOIN pessoas p ON p.id=c.pessoa_id ORDER BY c.id DESC""")
     return render_template('lotes.html', lotes=rows)
+
+
+@app.route('/compras/<int:compra_id>/historico')
+def historico_lote(compra_id):
+    dados = get_lote_historico(compra_id)
+    if not dados:
+        flash('Lote/compra não encontrado.')
+        return redirect(url_for('compras'))
+    return render_template('recibo_lote.html', **dados)
 
 
 @app.route('/financeiro', methods=['GET','POST'])
