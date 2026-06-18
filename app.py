@@ -1,8 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_file, session
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_file
 import sqlite3, csv, io, shutil, urllib.parse
 from pathlib import Path
 from datetime import datetime, date
-from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "controle-cafe-pro"
@@ -363,128 +362,13 @@ def update_all_status():
     for i in ids: update_compra_status(i)
 
 
-def usuario_count():
-    try:
-        row = fetchone("SELECT COUNT(*) c FROM usuarios")
-        return int(row['c'] or 0)
-    except Exception:
-        return 0
-
+# Login removido temporariamente: o sistema entra direto enquanto finalizamos as regras de uso.
+# A tabela usuarios pode continuar no banco sem atrapalhar, para recolocar login depois sem perder histórico.
 
 def usuario_logado():
-    uid = session.get('usuario_id')
-    if not uid:
-        return None
-    return fetchone("SELECT id, usuario, nome, tipo FROM usuarios WHERE id=?", (uid,))
-
+    return None
 
 app.jinja_env.globals['usuario_logado'] = usuario_logado
-
-
-@app.before_request
-def exigir_login():
-    liberadas = {'login', 'configurar_admin', 'static'}
-    if request.endpoint in liberadas or (request.endpoint or '').startswith('static'):
-        return
-    if usuario_count() == 0:
-        return redirect(url_for('configurar_admin'))
-    if not session.get('usuario_id'):
-        return redirect(url_for('login', next=request.path))
-
-
-@app.route('/configurar-admin', methods=['GET','POST'])
-def configurar_admin():
-    if usuario_count() > 0:
-        return redirect(url_for('login'))
-    if request.method == 'POST':
-        usuario = (request.form.get('usuario') or '').strip()
-        nome = (request.form.get('nome') or '').strip() or 'Administrador'
-        senha = request.form.get('senha') or ''
-        confirmar = request.form.get('confirmar') or ''
-        if not usuario or not senha:
-            flash('Informe o usuário e a senha.')
-            return redirect(url_for('configurar_admin'))
-        if len(senha) < 4:
-            flash('Use uma senha com pelo menos 4 caracteres.')
-            return redirect(url_for('configurar_admin'))
-        if senha != confirmar:
-            flash('As senhas não conferem.')
-            return redirect(url_for('configurar_admin'))
-        con = db(); cur = con.cursor()
-        cur.execute("INSERT INTO usuarios (usuario,senha_hash,nome,tipo,criado_em) VALUES (?,?,?,?,?)",
-                    (usuario, generate_password_hash(senha), nome, 'Administrador', datetime.now().isoformat(timespec='seconds')))
-        user_id = cur.lastrowid
-        con.commit(); con.close()
-        session['usuario_id'] = user_id
-        session['usuario_nome'] = nome
-        log_acao('Administrador configurado', 'usuario', user_id, usuario)
-        flash('Administrador criado. O sistema está protegido por senha.')
-        return redirect(url_for('index'))
-    return render_template('configurar_admin.html')
-
-
-@app.route('/login', methods=['GET','POST'])
-def login():
-    if usuario_count() == 0:
-        return redirect(url_for('configurar_admin'))
-    if request.method == 'POST':
-        usuario = (request.form.get('usuario') or '').strip()
-        senha = request.form.get('senha') or ''
-        row = fetchone("SELECT * FROM usuarios WHERE usuario=?", (usuario,))
-        if not row or not check_password_hash(row['senha_hash'], senha):
-            flash('Usuário ou senha incorretos.')
-            return redirect(url_for('login'))
-        session['usuario_id'] = row['id']
-        session['usuario_nome'] = row['nome'] or row['usuario']
-        log_acao('Login realizado', 'usuario', row['id'], usuario)
-        destino = request.args.get('next') or url_for('index')
-        return redirect(destino)
-    return render_template('login.html')
-
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    flash('Você saiu do sistema.')
-    return redirect(url_for('login'))
-
-
-@app.route('/administrador', methods=['GET','POST'])
-def administrador():
-    user = usuario_logado()
-    if not user:
-        return redirect(url_for('login'))
-    if request.method == 'POST':
-        usuario = (request.form.get('usuario') or '').strip()
-        nome = (request.form.get('nome') or '').strip() or 'Administrador'
-        senha_atual = request.form.get('senha_atual') or ''
-        nova_senha = request.form.get('nova_senha') or ''
-        confirmar = request.form.get('confirmar') or ''
-        atual = fetchone("SELECT * FROM usuarios WHERE id=?", (user['id'],))
-        if not check_password_hash(atual['senha_hash'], senha_atual):
-            flash('Senha atual incorreta.')
-            return redirect(url_for('administrador'))
-        if nova_senha and nova_senha != confirmar:
-            flash('A nova senha e a confirmação não conferem.')
-            return redirect(url_for('administrador'))
-        if nova_senha and len(nova_senha) < 4:
-            flash('A nova senha precisa ter pelo menos 4 caracteres.')
-            return redirect(url_for('administrador'))
-        try:
-            con = db()
-            if nova_senha:
-                con.execute("UPDATE usuarios SET usuario=?, nome=?, senha_hash=? WHERE id=?", (usuario, nome, generate_password_hash(nova_senha), user['id']))
-            else:
-                con.execute("UPDATE usuarios SET usuario=?, nome=? WHERE id=?", (usuario, nome, user['id']))
-            con.commit(); con.close()
-            session['usuario_nome'] = nome
-            log_acao('Administrador atualizado', 'usuario', user['id'], usuario)
-            flash('Dados do administrador atualizados.')
-        except sqlite3.IntegrityError:
-            flash('Esse usuário já está em uso.')
-        return redirect(url_for('administrador'))
-    return render_template('administrador.html', user=user)
-
 
 @app.route('/')
 def index():

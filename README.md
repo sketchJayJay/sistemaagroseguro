@@ -52,11 +52,6 @@ Acesse: http://localhost:8080
 - Busca nos seletores de cliente/fornecedor para facilitar no celular.
 
 
-## Login e senha
+## Acesso
 
-Na primeira abertura, o sistema mostra a tela **Criar acesso do administrador**.
-O cliente escolhe o usuário e a senha. Depois disso, todas as telas ficam protegidas por login.
-
-Para trocar usuário ou senha depois, use o menu **Administrador** dentro do sistema.
-
-Importante: mantenha o volume persistente em `/app/data`, pois o usuário, senha e banco de dados ficam salvos no mesmo banco SQLite.
+Nesta versão o login está desativado temporariamente. O sistema abre direto para finalizar os ajustes e testes com o cliente. Depois o login pode voltar sem apagar os dados, mantendo o volume persistente em `/app/data`.
