@@ -642,15 +642,59 @@ def editar_compra(compra_id):
         qtd = calc_sacas(peso, divisor, ajuste, informada)
         valor_saca = fnum('valor_saca'); frete, outras = fnum('frete'), fnum('outras_despesas')
         total = qtd * valor_saca + frete + outras
+        pessoa_id = request.form.get('pessoa_id') or None
+        lote = request.form.get('lote') or ''
+        tipo_cafe = request.form.get('tipo_cafe') or ''
+
+        # Primeiro salva a alteração da compra/lote.
         con = db(); con.execute("""UPDATE compras SET pessoa_id=?, data=?, lote=?, tipo_cafe=?, quantidade_sacas=?, peso_kg=?, divisor_saca=?, ajuste_sacas=?, valor_saca=?, valor_total=?, status_pagamento=?, forma_pagamento=?, frete=?, outras_despesas=?, origem_cafe=?, status_lote=?, observacao=? WHERE id=?""",
-            (request.form.get('pessoa_id') or None, request.form['data'], request.form.get('lote'), request.form.get('tipo_cafe'), qtd, peso, divisor, ajuste, valor_saca, total, request.form.get('status_pagamento'), request.form.get('forma_pagamento'), frete, outras, request.form.get('origem_cafe'), request.form.get('status_lote'), request.form.get('observacao'), compra_id))
+            (pessoa_id, request.form['data'], lote, tipo_cafe, qtd, peso, divisor, ajuste, valor_saca, total, request.form.get('status_pagamento'), request.form.get('forma_pagamento'), frete, outras, request.form.get('origem_cafe'), request.form.get('status_lote'), request.form.get('observacao'), compra_id))
         con.commit(); con.close()
-        update_financeiro(f"compra:{compra_id}", request.form['data'], 'Saída', f"Compra de café - {request.form.get('lote') or compra_id}", 'Compra de café', total, request.form.get('status_pagamento'))
+        update_financeiro(f"compra:{compra_id}", request.form['data'], 'Saída', f"Compra de café - {lote or compra_id}", 'Compra de café', total, request.form.get('status_pagamento'))
+
+        venda_qtd = fnum('venda_quantidade_sacas')
+        venda_valor_saca = fnum('venda_valor_saca')
+        venda_data = request.form.get('venda_data') or today()
+        venda_status = request.form.get('venda_status_recebimento') or 'Pendente'
+        venda_forma = request.form.get('venda_forma_pagamento') or ''
+        venda_obs = request.form.get('venda_observacao') or ''
+        venda_msg = ''
+
+        # Venda parcial direto pela edição da compra: se preencher quantidade e valor, lança a venda e baixa o saldo do lote.
+        if venda_qtd > 0 or venda_valor_saca > 0:
+            if venda_qtd <= 0 or venda_valor_saca <= 0:
+                update_compra_status(compra_id)
+                flash('Compra salva, mas a venda parcial não foi lançada: preencha quantidade vendida e valor de venda por saca.')
+                return redirect(url_for('editar_compra', compra_id=compra_id))
+            estoque_row = fetchone(f"SELECT ({lote_estoque_expr()}) estoque FROM compras c WHERE c.id=?", (compra_id,))
+            estoque_atual = float(estoque_row['estoque'] or 0) if estoque_row else 0
+            if venda_qtd > estoque_atual + 0.0001:
+                update_compra_status(compra_id)
+                flash(f'Compra salva, mas não dá para vender {br_num(venda_qtd)} sacas. Esse lote tem apenas {br_num(estoque_atual)} sacas disponíveis.')
+                return redirect(url_for('editar_compra', compra_id=compra_id))
+            subtotal = venda_qtd * venda_valor_saca
+            custo_saca = valor_saca
+            lucro = (venda_valor_saca - custo_saca) * venda_qtd
+            con = db(); cur = con.cursor()
+            cur.execute("""INSERT INTO vendas (pessoa_id,compra_id,data,lote,tipo_cafe,quantidade_sacas,valor_saca,subtotal_cafe,juros_percentual,meses_atraso,valor_juros,valor_total,custo_saca,lucro_total,status_recebimento,forma_pagamento,observacao)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (pessoa_id, compra_id, venda_data, lote, tipo_cafe, venda_qtd, venda_valor_saca, subtotal, 0, 0, 0, subtotal, custo_saca, lucro, venda_status, venda_forma, venda_obs or 'Venda parcial lançada pela edição da compra'))
+            venda_id = cur.lastrowid
+            cur.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
+                        (venda_data, 'Entrada', f"Venda parcial de café - {lote or compra_id}", 'Venda de café', subtotal, venda_status, f"venda:{venda_id}"))
+            con.commit(); con.close()
+            log_acao('Venda parcial lançada pela compra', 'venda', venda_id, f"Compra #{compra_id} - {br_num(venda_qtd)} sacas - {br_money(subtotal)}")
+            restante_row = fetchone(f"SELECT ({lote_estoque_expr()}) estoque FROM compras c WHERE c.id=?", (compra_id,))
+            restante = float(restante_row['estoque'] or 0) if restante_row else 0
+            venda_msg = f' Venda parcial lançada. Restam {br_num(restante)} sacas nesse lote.' if restante > 0.0001 else ' Venda parcial lançada. Esse lote foi vendido totalmente.'
+
         update_compra_status(compra_id)
         log_acao('Compra editada', 'compra', compra_id, f"Total: {br_money(total)}")
-        flash('Compra atualizada.')
-        return redirect(url_for('compras'))
-    return render_template('editar_compra.html', compra=compra, pessoas=pessoas_rows, tipos_cafe=TIPOS_CAFE)
+        flash('Compra atualizada.' + venda_msg)
+        return redirect(url_for('editar_compra', compra_id=compra_id))
+
+    historico = get_lote_historico(compra_id)
+    return render_template('editar_compra.html', compra=compra, pessoas=pessoas_rows, tipos_cafe=TIPOS_CAFE, historico=historico, hoje=today())
 
 
 @app.route('/compras/<int:compra_id>/excluir', methods=['POST'])
