@@ -1,0 +1,28 @@
+{% extends 'base.html' %}{% block content %}
+<h1>Compras de café</h1><p class="subtitle">Peso dividido por saca, ajuste manual, estoque por lote e edição/exclusão.</p>
+<div class="card">
+  <form method="post" class="form calc-sacas">
+    <div><label>Data</label><input type="date" name="data" value="{{ hoje }}" required></div>
+    <div><label>Buscar fornecedor</label><input type="search" class="select-search" data-target="pessoa_id" placeholder="Digite para filtrar"></div>
+    <div><label>Fornecedor</label><select name="pessoa_id" id="pessoa_id"><option value="">Sem cadastro</option>{% for p in pessoas %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}</select></div>
+    <div><label>Lote</label><input name="lote" placeholder="Ex: Lote 0001"></div>
+    <div><label>Origem/Fazenda</label><input name="origem_cafe"></div>
+    <div><label>Tipo de café</label><select name="tipo_cafe"><option value="">Selecione</option>{% for t in tipos_cafe %}<option>{{ t }}</option>{% endfor %}</select></div>
+    <div><label>Peso KG</label><input type="number" step="0.01" name="peso_kg" class="peso"></div>
+    <div><label>Dividir por KG/saca</label><input type="number" step="0.01" name="divisor_saca" value="60" class="divisor"></div>
+    <div><label>Ajuste de sacas</label><input type="number" step="0.01" name="ajuste_sacas" value="0" class="ajuste"></div>
+    <div><label>Sacas finais</label><input type="number" step="0.01" name="quantidade_sacas" class="sacas" placeholder="Calcula ou informe manual"></div>
+    <div><label>Valor por saca</label><input type="number" step="0.01" name="valor_saca" required></div>
+    <div><label>Frete</label><input type="number" step="0.01" name="frete"></div>
+    <div><label>Outras despesas</label><input type="number" step="0.01" name="outras_despesas"></div>
+    <div><label>Forma pgto.</label><input name="forma_pagamento" placeholder="Pix, dinheiro..."></div>
+    <div><label>Pagamento</label><select name="status_pagamento"><option>Pendente</option><option>Pago</option></select></div>
+    <div><label>Status lote</label><select name="status_lote"><option>Em estoque</option><option>Em análise</option><option>Reservado</option><option>Vendido parcial</option><option>Vendido</option></select></div>
+    <div class="span"><label>Observação</label><input name="observacao"></div>
+    <button class="btn">Lançar compra</button>
+  </form>
+  <table><tr><th>Data</th><th>Fornecedor</th><th>Lote</th><th>Tipo</th><th>Peso</th><th>Sacas</th><th>Valor/saca</th><th>Total</th><th>Status</th><th>Ações</th></tr>
+  {% for c in compras %}<tr><td>{{ c.data }}</td><td>{{ c.pessoa_nome or '-' }}</td><td>{{ c.lote or '-' }}</td><td>{{ c.tipo_cafe or '-' }}</td><td>{{ c.peso_kg|num }} kg</td><td>{{ c.quantidade_sacas|num }}</td><td>{{ c.valor_saca|money }}</td><td>{{ c.valor_total|money }}</td><td><span class="badge {% if c.status_lote in ['Em estoque','Vendido parcial'] %}ok{% endif %}">{{ c.status_lote or c.status_pagamento }}</span></td><td class="actions"><a class="mini" href="{{ url_for('recibo', tipo='compra', item_id=c.id) }}" target="_blank">Recibo</a><a class="mini" href="{{ url_for('editar_compra', compra_id=c.id) }}">Editar</a><form method="post" action="{{ url_for('excluir_compra', compra_id=c.id) }}" onsubmit="return confirm('Excluir compra? Isso também remove vendas e provas ligadas a ela.');"><button class="mini danger">Excluir</button></form></td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

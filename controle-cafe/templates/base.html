@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Café Boa Vista • Sistema de Gestão</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <aside class="side">
+    <div class="brand-card">
+      <img class="brand-logo" src="{{ url_for('static', filename='logo_boavista.jpg') }}" alt="Logo Café Boa Vista">
+      <div class="brand-text">
+        <b>Café Boa Vista</b>
+        <span>Sistema de compra • prova • venda</span>
+      </div>
+    </div>
+
+    <div class="contact-box">
+      <small>Comprador</small>
+      <strong>Sebastião Lopes Filho</strong>
+      <span>📞 (33) 99970-7857</span>
+      <span>📞 (33) 98459-1051</span>
+      <span>📍 Grumarinho - próximo Neblina, Divino - MG</span>
+    </div>
+
+    {% if usuario_logado() %}
+    <div class="contact-box user-box">
+      <small>Acesso logado</small>
+      <strong>{{ usuario_logado().nome or usuario_logado().usuario }}</strong>
+      <span>{{ usuario_logado().tipo }}</span>
+    </div>
+    {% endif %}
+
+    <nav>
+      <a href="{{ url_for('index') }}">Painel</a>
+      <a href="{{ url_for('pessoas') }}">Pessoas</a><a href="{{ url_for('clientes') }}">Painel Clientes/Produtores</a>
+      <a href="{{ url_for('compras') }}">Compras</a>
+      <a href="{{ url_for('provas') }}">Provas</a>
+      <a href="{{ url_for('vendas') }}">Vendas</a>
+      <a href="{{ url_for('lotes') }}">Lotes/Estoque</a>
+      <a href="{{ url_for('financeiro') }}">Financeiro</a>
+      <a href="{{ url_for('simulador') }}">Simulador</a>
+      <a href="{{ url_for('relatorios') }}">Relatórios</a>
+      <a href="{{ url_for('busca_geral') }}">Busca geral</a>
+      <a href="{{ url_for('backup') }}">Backup</a>
+      <a href="{{ url_for('administrador') }}">Administrador</a>
+      <a href="{{ url_for('logout') }}">Sair</a>
+    </nav>
+
+    <div class="brand-footer">
+      <em>“Servir bem e honestidade é nossa missão”</em>
+    </div>
+  </aside>
+
+  <main>
+    {% with msgs=get_flashed_messages() %}
+      {% if msgs %}<div class="flash">{{ msgs[0] }}</div>{% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+<script>
+document.addEventListener('input', function(e){
+  if(e.target.classList.contains('select-search')){
+    const sel=document.getElementById(e.target.dataset.target); if(!sel) return;
+    const q=e.target.value.toLowerCase();
+    [...sel.options].forEach((op,i)=>{op.hidden = i>0 && !op.text.toLowerCase().includes(q);});
+  }
+  if(e.target.closest('.calc-sacas')){
+    const form=e.target.closest('.calc-sacas');
+    const peso=parseFloat((form.querySelector('.peso')?.value||'0').replace(',','.'))||0;
+    const divisor=parseFloat((form.querySelector('.divisor')?.value||'60').replace(',','.'))||60;
+    const ajuste=parseFloat((form.querySelector('.ajuste')?.value||'0').replace(',','.'))||0;
+    const sacas=form.querySelector('.sacas');
+    if(sacas && (e.target.classList.contains('peso') || e.target.classList.contains('divisor') || e.target.classList.contains('ajuste'))){
+      sacas.value=((peso/divisor)+ajuste).toFixed(2);
+    }
+  }
+});
+</script>
+</body>
+</html>

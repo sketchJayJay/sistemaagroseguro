@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="hero card">
+  <div>
+    <span class="eyebrow">CAFÉ BOA VISTA</span>
+    <h1>Painel geral</h1>
+    <p class="subtitle">A mesa de comando da empresa: estoque, dinheiro, lucro e movimentos recentes em um só lugar.</p>
+  </div>
+  <div class="hero-note">
+    <strong>Sebastião Lopes Filho</strong>
+    <p>Gestão prática para acompanhar compras, provas, vendas e resultados do café com mais organização.</p>
+  </div>
+</div>
+
+<div class="grid metrics">
+  <div class="card metric"><small>Estoque atual</small><strong>{{ estoque|num }} sacas</strong></div>
+  <div class="card metric"><small>Valor em estoque</small><strong>{{ valor_estoque|money }}</strong></div>
+  <div class="card metric"><small>Total comprado</small><strong>{{ total_compras|money }}</strong></div>
+  <div class="card metric"><small>Total vendido</small><strong>{{ total_vendas|money }}</strong></div>
+  <div class="card metric good"><small>Lucro realizado</small><strong>{{ lucro|money }}</strong></div>
+  <div class="card metric"><small>Saldo financeiro</small><strong>{{ saldo|money }}</strong></div>
+  <div class="card metric warn"><small>A receber</small><strong>{{ receber|money }}</strong></div>
+  <div class="card metric warn"><small>A pagar</small><strong>{{ pagar|money }}</strong></div>
+</div>
+
+<div class="quick">
+  <a class="btn" href="{{ url_for('compras') }}">+ Nova compra</a>
+  <a class="btn" href="{{ url_for('provas') }}">+ Nova prova</a>
+  <a class="btn" href="{{ url_for('vendas') }}">+ Nova venda</a>
+  <a class="btn light" href="{{ url_for('simulador') }}">Simular negociação</a><a class="btn light" href="{{ url_for('clientes') }}">Painel clientes</a>
+</div>
+
+<div class="row">
+  <div class="card">
+    <div class="section-title"><h2>Últimas compras</h2><a href="{{ url_for('compras') }}">ver todas</a></div>
+    <table><tr><th>Data</th><th>Fornecedor</th><th>Lote</th><th>Total</th></tr>{% for c in ultimas_compras %}<tr><td>{{ c.data }}</td><td>{{ c.pessoa_nome or '-' }}</td><td>{{ c.lote or '-' }}</td><td>{{ c.valor_total|money }}</td></tr>{% endfor %}</table>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Últimas vendas</h2><a href="{{ url_for('vendas') }}">ver todas</a></div>
+    <table><tr><th>Data</th><th>Cliente</th><th>Lote</th><th>Lucro</th></tr>{% for v in ultimas_vendas %}<tr><td>{{ v.data }}</td><td>{{ v.pessoa_nome or '-' }}</td><td>{{ v.lote or '-' }}</td><td>{{ v.lucro_total|money }}</td></tr>{% endfor %}</table>
+  </div>
+</div>
+{% endblock %}
