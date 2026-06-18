@@ -1,6 +1,7 @@
 {% extends 'base.html' %}{% block content %}
 <h1>Editar venda do cliente</h1><p class="subtitle">Altere a quantidade vendida, preço por saca e pagamento ao cliente. O saldo do lote será recalculado.</p>
 <div class="card"><form method="post" class="form">
+  <input type="hidden" name="return_to" value="{{ return_to }}">
   <div><label>Data</label><input type="date" name="data" value="{{ venda.data }}" required></div>
   <div><label>Buscar cliente</label><input type="search" class="select-search" data-target="pessoa_id" placeholder="Digite para filtrar"></div>
   <div><label>Cliente</label><select name="pessoa_id" id="pessoa_id"><option value="">Sem cadastro</option>{% for p in pessoas %}<option value="{{ p.id }}" {% if venda.pessoa_id==p.id %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}</select></div>
@@ -15,6 +16,6 @@
   <div><label>Forma de pagamento ao cliente</label><input name="forma_pagamento" value="{{ venda.forma_pagamento or '' }}"></div>
   <div><label>Pagamento ao cliente</label><select name="status_recebimento"><option value="A pagar ao cliente" {% if venda.status_recebimento in ['A pagar ao cliente','Pendente'] %}selected{% endif %}>A pagar ao cliente</option><option value="Pago ao cliente" {% if venda.status_recebimento in ['Pago ao cliente','Recebido'] %}selected{% endif %}>Pago ao cliente</option></select></div>
   <div class="span"><label>Observação</label><input name="observacao" value="{{ venda.observacao or '' }}"></div>
-  <button class="btn">Salvar alterações</button><a class="btn light" href="{{ url_for('vendas') }}">Voltar</a>
+  <button class="btn">Salvar alterações</button><a class="btn light" href="{{ return_to }}">Voltar</a>
 </form></div>
 {% endblock %}

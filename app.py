@@ -262,6 +262,14 @@ def whatsapp_link(texto):
 app.jinja_env.globals['whatsapp_link'] = whatsapp_link
 
 
+def safe_return_url(default_endpoint='vendas', **default_values):
+    """Retorna para uma tela interna depois de editar/excluir, sem abrir redirecionamento externo."""
+    destino = request.form.get('return_to') or request.args.get('return_to') or ''
+    if destino.startswith('/') and not destino.startswith('//'):
+        return destino
+    return url_for(default_endpoint, **default_values)
+
+
 def get_acerto_data(pessoa_id):
     pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
     if not pessoa:
@@ -955,8 +963,9 @@ def editar_venda(venda_id):
         update_compra_status(old_compra_id); update_compra_status(compra_id)
         log_acao('Venda editada', 'venda', venda_id, f"Total: {br_money(total)}")
         flash('Venda atualizada. Preço, juros, lucro e estoque recalculados.')
-        return redirect(url_for('vendas'))
-    return render_template('editar_venda.html', venda=venda, pessoas=pessoas_rows, lotes=lotes, tipos_cafe=TIPOS_CAFE)
+        return redirect(safe_return_url('vendas'))
+    return_to = safe_return_url('vendas')
+    return render_template('editar_venda.html', venda=venda, pessoas=pessoas_rows, lotes=lotes, tipos_cafe=TIPOS_CAFE, return_to=return_to)
 
 
 @app.route('/vendas/<int:venda_id>/excluir', methods=['POST'])
@@ -966,7 +975,7 @@ def excluir_venda(venda_id):
     if venda: update_compra_status(venda['compra_id'])
     log_acao('Venda excluída', 'venda', venda_id, '')
     flash('Venda excluída e estoque recalculado.')
-    return redirect(url_for('vendas'))
+    return redirect(safe_return_url('vendas'))
 
 
 @app.route('/lotes')

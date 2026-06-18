@@ -62,11 +62,11 @@
   <div class="card">
     <h2>Histórico de vendas parciais</h2>
     <table>
-      <tr><th>Data</th><th>Sacas</th><th>Preço/saca</th><th>Total</th><th>Pagamento</th></tr>
+      <tr><th>Data</th><th>Sacas</th><th>Preço/saca</th><th>Total</th><th>Pagamento</th><th>Ações</th></tr>
       {% for v in historico.vendas %}
-      <tr><td>{{ v.data }}</td><td>{{ v.quantidade_sacas|num }}</td><td>{{ v.valor_saca|money }}</td><td>{{ v.valor_total|money }}</td><td>{% if v.status_recebimento in ['Pago ao cliente','Recebido'] %}Pago ao cliente{% else %}A pagar ao cliente{% endif %}</td></tr>
+      <tr><td>{{ v.data }}</td><td>{{ v.quantidade_sacas|num }}</td><td>{{ v.valor_saca|money }}</td><td>{{ v.valor_total|money }}</td><td>{% if v.status_recebimento in ['Pago ao cliente','Recebido'] %}Pago ao cliente{% else %}A pagar ao cliente{% endif %}</td><td><a class="mini" href="{{ url_for('editar_venda', venda_id=v.id, return_to=url_for('editar_compra', compra_id=compra.id)) }}">Editar</a><form method="post" action="{{ url_for('excluir_venda', venda_id=v.id) }}" style="display:inline" onsubmit="return confirm('Excluir essa venda parcial? O saldo do lote será recalculado.');"><input type="hidden" name="return_to" value="{{ url_for('editar_compra', compra_id=compra.id) }}"><button class="mini danger">Excluir</button></form></td></tr>
       {% else %}
-      <tr><td colspan="5">Nenhuma venda parcial lançada ainda.</td></tr>
+      <tr><td colspan="6">Nenhuma venda parcial lançada ainda.</td></tr>
       {% endfor %}
     </table>
   </div>

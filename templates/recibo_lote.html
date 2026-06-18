@@ -37,7 +37,7 @@
     <h2>Vendas parciais do cliente neste lote</h2>
     {% if vendas %}
       <table>
-        <tr><th>Data</th><th>Cliente</th><th>Sacas vendidas</th><th>Valor/saca</th><th>Juros</th><th>Total venda</th><th>Pagamento ao cliente</th><th>Obs.</th></tr>
+        <tr><th>Data</th><th>Cliente</th><th>Sacas vendidas</th><th>Valor/saca</th><th>Juros</th><th>Total venda</th><th>Pagamento ao cliente</th><th>Obs.</th><th class="no-print">Ações</th></tr>
         {% for v in vendas %}
         <tr>
           <td>{{ v.data }}</td>
@@ -48,6 +48,13 @@
           <td><b>{{ v.valor_total|money }}</b></td>
           <td>{% if v.status_recebimento in ['Pago ao cliente','Recebido'] %}Pago ao cliente{% else %}A pagar ao cliente{% endif %}</td>
           <td>{{ v.observacao or '-' }}</td>
+          <td class="no-print">
+            <a class="mini" href="{{ url_for('editar_venda', venda_id=v.id, return_to=url_for('historico_lote', compra_id=compra.id)) }}">Editar</a>
+            <form method="post" action="{{ url_for('excluir_venda', venda_id=v.id) }}" style="display:inline" onsubmit="return confirm('Excluir essa venda parcial? O saldo do lote será recalculado.');">
+              <input type="hidden" name="return_to" value="{{ url_for('historico_lote', compra_id=compra.id) }}">
+              <button class="mini danger">Excluir</button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
       </table>
@@ -58,7 +65,7 @@
     <hr>
     <p><b>Resumo final:</b> de {{ qtd_original|num }} sacas registradas no lote, o cliente já vendeu {{ vendido|num }} sacas e ainda restam {{ restante|num }} sacas.</p>
     <p class="receipt-slogan">Servir bem e honestidade é nossa missão</p>
-    <div class="actions no-print"><button onclick="window.print()" class="btn">Imprimir / salvar PDF</button><a class="btn light" href="{{ whatsapp_link(texto_whatsapp) }}" target="_blank">Enviar WhatsApp</a></div>
+    <div class="actions no-print"><button onclick="window.print()" class="btn">Imprimir / salvar PDF</button><a class="btn light" href="{{ whatsapp_link(texto_whatsapp) }}" target="_blank">Enviar WhatsApp</a><a class="btn light" href="{{ url_for('editar_compra', compra_id=compra.id) }}">Voltar ao lote</a></div>
   </div>
 </body>
 </html>
