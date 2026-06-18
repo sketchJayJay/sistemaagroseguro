@@ -210,6 +210,27 @@ def fetchone(query, params=()):
     con = db(); row = con.execute(query, params).fetchone(); con.close(); return row
 
 
+
+
+def get_pessoas_choices(query=""):
+    """Lista clientes/produtores para selects com busca, sem derrubar telas quando não há cadastro."""
+    q = (query or '').strip()
+    if q:
+        like = f"%{q}%"
+        return fetchall("""
+            SELECT id, nome, tipo, documento, telefone, whatsapp, cidade, fazenda
+            FROM pessoas
+            WHERE nome LIKE ? OR documento LIKE ? OR telefone LIKE ? OR whatsapp LIKE ? OR cidade LIKE ? OR fazenda LIKE ?
+            ORDER BY nome COLLATE NOCASE
+            LIMIT 300
+        """, (like, like, like, like, like, like))
+    return fetchall("""
+        SELECT id, nome, tipo, documento, telefone, whatsapp, cidade, fazenda
+        FROM pessoas
+        ORDER BY nome COLLATE NOCASE
+        LIMIT 500
+    """)
+
 def log_acao(acao, entidade='', entidade_id=None, detalhe=''):
     try:
         con = db()
