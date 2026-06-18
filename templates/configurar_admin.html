@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Configurar administrador • Café Boa Vista</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <img src="{{ url_for('static', filename='logo_boavista.jpg') }}" alt="Café Boa Vista">
+    <h1>Criar acesso do administrador</h1>
+    <p>Na primeira vez, o cliente escolhe o usuário e a senha. Depois disso, só entra no sistema com esses dados.</p>
+    {% with msgs=get_flashed_messages() %}{% if msgs %}<div class="flash">{{ msgs[0] }}</div>{% endif %}{% endwith %}
+    <form method="post" class="auth-form">
+      <label>Nome do administrador</label>
+      <input name="nome" placeholder="Ex: Sebastião" required>
+      <label>Usuário</label>
+      <input name="usuario" placeholder="Ex: admin" autocomplete="username" required>
+      <label>Senha</label>
+      <input type="password" name="senha" autocomplete="new-password" required>
+      <label>Confirmar senha</label>
+      <input type="password" name="confirmar" autocomplete="new-password" required>
+      <button class="btn">Salvar e entrar</button>
+    </form>
+  </div>
+</body>
+</html>

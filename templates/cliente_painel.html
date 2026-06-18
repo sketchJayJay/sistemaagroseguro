@@ -1,22 +1,22 @@
 {% extends 'base.html' %}{% block content %}
 <div class="hero card"><div><span class="eyebrow">PAINEL DO CLIENTE</span><h1>{{ pessoa.nome }}</h1><p class="subtitle">Vendas, provas, estoque ainda disponível, valores pegados e saldo por tipo de café.</p></div><div class="hero-note"><b>{{ pessoa.tipo }}</b><p>{{ pessoa.whatsapp or pessoa.telefone or 'Sem telefone' }}<br>{{ pessoa.fazenda or pessoa.cidade or '' }}</p><div class="actions"><a class="mini" href="{{ url_for('editar_pessoa', pessoa_id=pessoa.id) }}">Editar cliente</a><form method="post" action="{{ url_for('excluir_pessoa', pessoa_id=pessoa.id) }}" onsubmit="return confirm('Excluir cliente? O histórico será mantido sem vínculo.');"><button class="mini danger">Excluir</button></form></div></div></div>
-<div class="quick"><a class="btn" href="{{ url_for('extrato_cliente', pessoa_id=pessoa.id) }}" target="_blank">Gerar extrato</a><form method="post" action="{{ url_for('acertar_tudo_cliente', pessoa_id=pessoa.id) }}" onsubmit="return confirm('Marcar vendas pendentes e valores pegos como pagos e lançar acerto no financeiro?');"><button class="btn light">Acertar tudo</button></form></div>
+<div class="quick"><a class="btn" href="{{ url_for('acerto_cliente', pessoa_id=pessoa.id) }}" target="_blank">Fazer acerto</a><a class="btn light" href="{{ url_for('extrato_cliente', pessoa_id=pessoa.id) }}" target="_blank">Gerar extrato</a><form method="post" action="{{ url_for('acertar_tudo_cliente', pessoa_id=pessoa.id) }}" onsubmit="return confirm('Marcar vendas pendentes e valores pegos como pagos e lançar acerto no financeiro?');"><button class="btn light">Acertar tudo direto</button></form></div>
 
 <div class="grid metrics"><div class="card metric"><small>Saldo vendas pendentes</small><strong>{{ saldo_pendente|money }}</strong></div><div class="card metric"><small>Valores pegados sem juros</small><strong>{{ total_adiantamentos|money }}</strong></div><div class="card metric warn"><small>Juros dos valores pegados</small><strong>{{ juros_adiantamentos|money }}</strong></div><div class="card metric good"><small>Total para acerto</small><strong>{{ (saldo_pendente + total_adiantamentos_juros)|money }}</strong></div></div>
 
-<div class="card"><h2>Valores que o cliente pegou</h2><p class="subtitle">Use para lançar cada valor separadamente. Exemplo: pegou R$ 800,00 em 02/03 e R$ 1.000,00 em 05/04. Cada lançamento tem seus próprios meses de atraso e juros.</p>
+<div class="card"><h2>Valores que o cliente pegou</h2><p class="subtitle">Use para lançar cada valor separadamente. Exemplo: pegou R$ 800,00 em 02/03 e R$ 1.000,00 em 05/04. Cada lançamento calcula os meses automaticamente pela data que o cliente pegou. Quando virar o mês, o juros atualiza sozinho.</p>
   <form method="post" action="{{ url_for('adicionar_adiantamento', pessoa_id=pessoa.id) }}" class="form solo-4" id="form-adiantamento">
     <div><label>Data que pegou</label><input type="date" name="data" value="{{ hoje or '' }}" required></div>
     <div><label>Valor que pegou</label><input type="number" step="0.01" name="valor" id="valor-adiantamento" placeholder="Ex: 800" required></div>
     <div><label>Taxa juros % ao mês</label><input type="number" step="0.01" name="taxa_juros" id="taxa-adiantamento" value="3"></div>
-    <div><label>Meses em atraso</label><input type="number" step="0.01" name="meses_atraso" id="meses-adiantamento" value="0"></div>
+    <div><label>Meses automáticos</label><input id="meses-adiantamento" readonly value="0"><small class="hint">Calculado pela data até hoje</small></div>
     <div class="span"><label>Observação</label><input name="observacao" placeholder="Ex: dinheiro entregue, pix, acerto parcial..."></div>
     <div><label>Status</label><select name="status"><option>Aberto</option><option>Pago</option></select></div>
     <div><label>Prévia do resultado</label><input id="resultado-adiantamento" readonly value="R$ 0,00"></div>
     <label class="checkline"><input type="checkbox" name="lancar_financeiro" value="1"> Lançar no financeiro como saída</label>
     <button class="btn">Salvar valor pego</button>
   </form>
-  <table><tr><th>Data</th><th>Valor</th><th>Taxa</th><th>Meses</th><th>Juros</th><th>Total com juros</th><th>Status</th><th>Obs.</th><th>Ações</th></tr>{% for a in adiantamentos %}<tr><td>{{ a.data }}</td><td>{{ a.valor|money }}</td><td>{{ a.taxa_juros|num }}%</td><td>{{ a.meses_atraso|num }}</td><td>{{ a.valor_juros|money }}</td><td><b>{{ a.valor_total|money }}</b></td><td><span class="badge {% if a.status=='Pago' %}ok{% else %}bad{% endif %}">{{ a.status }}</span></td><td>{{ a.observacao or '-' }}</td><td><div class="actions">{% if a.status!='Pago' %}<form method="post" action="{{ url_for('baixar_adiantamento', adiantamento_id=a.id) }}"><button class="mini">Marcar pago</button></form>{% endif %}<form method="post" action="{{ url_for('excluir_adiantamento', adiantamento_id=a.id) }}" onsubmit="return confirm('Excluir esse valor pego?');"><button class="mini danger">Excluir</button></form></div></td></tr>{% endfor %}</table>
+  <table><tr><th>Data</th><th>Valor</th><th>Taxa</th><th>Meses auto</th><th>Juros atualizado</th><th>Total atualizado</th><th>Status</th><th>Obs.</th><th>Ações</th></tr>{% for a in adiantamentos %}<tr><td>{{ a.data }}</td><td>{{ a.valor|money }}</td><td>{{ a.taxa_juros|num }}%</td><td>{{ a.meses_atraso|num }}</td><td>{{ a.valor_juros|money }}</td><td><b>{{ a.valor_total|money }}</b></td><td><span class="badge {% if a.status=='Pago' %}ok{% else %}bad{% endif %}">{{ a.status }}</span></td><td>{{ a.observacao or '-' }}</td><td><div class="actions">{% if a.status!='Pago' %}<form method="post" action="{{ url_for('baixar_adiantamento', adiantamento_id=a.id) }}"><button class="mini">Marcar pago</button></form>{% endif %}<form method="post" action="{{ url_for('excluir_adiantamento', adiantamento_id=a.id) }}" onsubmit="return confirm('Excluir esse valor pego?');"><button class="mini danger">Excluir</button></form></div></td></tr>{% endfor %}</table>
 </div>
 
 <div class="card"><h2>Cobrar juros sobre vendas pendentes</h2><p class="subtitle">Essa parte calcula juros sobre vendas em aberto. Para valores que ele pegou em datas diferentes, use a seção acima.</p><form method="get" class="form solo-4"><div><label>Taxa do juros % ao mês</label><input type="number" step="0.01" name="taxa_juros" value="{{ taxa }}"></div><div><label>Meses em atraso</label><input type="number" step="0.01" name="meses_atraso" value="{{ meses }}"></div><div><label>Resultado vendas + juros</label><input readonly value="{{ total_com_juros|money }}"></div><button class="btn">Calcular juros</button></form><form method="post" action="{{ url_for('aplicar_juros_cliente', pessoa_id=pessoa.id) }}" class="quick" onsubmit="return confirm('Lançar esse juros no financeiro como entrada pendente?');"><input type="hidden" name="taxa_juros" value="{{ taxa }}"><input type="hidden" name="meses_atraso" value="{{ meses }}"><button class="btn light">Aplicar juros no financeiro</button></form></div>
@@ -31,14 +31,28 @@
 
 <script>
 function brMoney(v){return (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function mesesAutomaticos(dataStr){
+  if(!dataStr) return 0;
+  const partes = dataStr.split('-').map(Number);
+  if(partes.length < 3) return 0;
+  const inicio = new Date(partes[0], partes[1]-1, partes[2]);
+  const hoje = new Date();
+  let meses = (hoje.getFullYear()-inicio.getFullYear())*12 + (hoje.getMonth()-inicio.getMonth());
+  if(hoje.getDate() < inicio.getDate()) meses--;
+  return Math.max(0, meses);
+}
 function atualizaAdiantamento(){
   const valor=parseFloat((document.getElementById('valor-adiantamento').value||'0').replace(',','.'))||0;
   const taxa=parseFloat((document.getElementById('taxa-adiantamento').value||'0').replace(',','.'))||0;
-  const meses=parseFloat((document.getElementById('meses-adiantamento').value||'0').replace(',','.'))||0;
+  const dataEl=document.querySelector('#form-adiantamento input[name="data"]');
+  const meses=mesesAutomaticos(dataEl ? dataEl.value : '');
+  const mesesEl=document.getElementById('meses-adiantamento');
+  if(mesesEl) mesesEl.value = meses + ' mês(es)';
   const juros=valor*(taxa/100)*meses;
   document.getElementById('resultado-adiantamento').value = brMoney(valor+juros) + '  | juros: ' + brMoney(juros);
 }
-['valor-adiantamento','taxa-adiantamento','meses-adiantamento'].forEach(id=>{const el=document.getElementById(id); if(el){el.addEventListener('input',atualizaAdiantamento);}});
+['valor-adiantamento','taxa-adiantamento'].forEach(id=>{const el=document.getElementById(id); if(el){el.addEventListener('input',atualizaAdiantamento);}});
+const dataAdi = document.querySelector('#form-adiantamento input[name="data"]'); if(dataAdi){dataAdi.addEventListener('change', atualizaAdiantamento);}
 atualizaAdiantamento();
 </script>
 {% endblock %}

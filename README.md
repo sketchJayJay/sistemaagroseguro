@@ -50,3 +50,13 @@ Acesse: http://localhost:8080
 - Venda recalcula status do lote para Vendido ou Vendido parcial.
 - Venda permite editar preço, juros, meses em atraso e status de recebimento.
 - Busca nos seletores de cliente/fornecedor para facilitar no celular.
+
+
+## Login e senha
+
+Na primeira abertura, o sistema mostra a tela **Criar acesso do administrador**.
+O cliente escolhe o usuário e a senha. Depois disso, todas as telas ficam protegidas por login.
+
+Para trocar usuário ou senha depois, use o menu **Administrador** dentro do sistema.
+
+Importante: mantenha o volume persistente em `/app/data`, pois o usuário, senha e banco de dados ficam salvos no mesmo banco SQLite.

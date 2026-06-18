@@ -24,6 +24,14 @@
       <span>📍 Grumarinho - próximo Neblina, Divino - MG</span>
     </div>
 
+    {% if usuario_logado() %}
+    <div class="contact-box user-box">
+      <small>Acesso logado</small>
+      <strong>{{ usuario_logado().nome or usuario_logado().usuario }}</strong>
+      <span>{{ usuario_logado().tipo }}</span>
+    </div>
+    {% endif %}
+
     <nav>
       <a href="{{ url_for('index') }}">Painel</a>
       <a href="{{ url_for('pessoas') }}">Pessoas</a><a href="{{ url_for('clientes') }}">Painel Clientes/Produtores</a>
@@ -36,6 +44,8 @@
       <a href="{{ url_for('relatorios') }}">Relatórios</a>
       <a href="{{ url_for('busca_geral') }}">Busca geral</a>
       <a href="{{ url_for('backup') }}">Backup</a>
+      <a href="{{ url_for('administrador') }}">Administrador</a>
+      <a href="{{ url_for('logout') }}">Sair</a>
     </nav>
 
     <div class="brand-footer">

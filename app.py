@@ -1,7 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_file, session
 import sqlite3, csv, io, shutil, urllib.parse
 from pathlib import Path
 from datetime import datetime, date
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "controle-cafe-pro"
@@ -176,6 +177,14 @@ def init_db():
         acao TEXT NOT NULL,
         detalhe TEXT
     );
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT NOT NULL UNIQUE,
+        senha_hash TEXT NOT NULL,
+        nome TEXT,
+        tipo TEXT DEFAULT 'Administrador',
+        criado_em TEXT NOT NULL
+    );
     """)
     for table, cols in {
         'pessoas': [('documento','TEXT'),('whatsapp','TEXT'),('endereco','TEXT'),('fazenda','TEXT')],
@@ -184,7 +193,8 @@ def init_db():
         'vendas': [('compra_id','INTEGER'),('custo_saca','REAL DEFAULT 0'),('lucro_total','REAL DEFAULT 0'),('forma_pagamento','TEXT'),('subtotal_cafe','REAL DEFAULT 0'),('juros_percentual','REAL DEFAULT 0'),('meses_atraso','REAL DEFAULT 0'),('valor_juros','REAL DEFAULT 0')],
         'financeiro': [('categoria','TEXT')],
         'adiantamentos': [('taxa_juros','REAL DEFAULT 0'),('meses_atraso','REAL DEFAULT 0'),('valor_juros','REAL DEFAULT 0'),('valor_total','REAL DEFAULT 0'),('observacao','TEXT'),('status',"TEXT DEFAULT 'Aberto'"),('criado_em','TEXT')],
-        'historico': [('entidade','TEXT'),('entidade_id','INTEGER'),('detalhe','TEXT')]
+        'historico': [('entidade','TEXT'),('entidade_id','INTEGER'),('detalhe','TEXT')],
+        'usuarios': [('nome','TEXT'),('tipo',"TEXT DEFAULT 'Administrador'")]
     }.items():
         for column, definition in cols:
             add_column(cur, table, column, definition)
@@ -217,6 +227,26 @@ def whatsapp_link(texto):
 app.jinja_env.globals['whatsapp_link'] = whatsapp_link
 
 
+def get_acerto_data(pessoa_id):
+    pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
+    if not pessoa:
+        return None
+    atualizar_adiantamentos_abertos(pessoa_id)
+    vendas_rows = fetchall("SELECT * FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente' ORDER BY data DESC, id DESC", (pessoa_id,))
+    adiantamentos_rows = [adiantamento_com_juros_atual(a) for a in fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? AND UPPER(TRIM(COALESCE(status,'Aberto'))) NOT IN ('PAGO','PAGA','QUITADO','QUITADA') ORDER BY data DESC, id DESC", (pessoa_id,))]
+    estoque_tipo = fetchall(f"""SELECT COALESCE(c.tipo_cafe,'Sem tipo') tipo, SUM({lote_estoque_expr()}) sacas, SUM(({lote_estoque_expr()}) * c.valor_saca) valor
+        FROM compras c WHERE c.pessoa_id=? GROUP BY COALESCE(c.tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
+    saldo_vendas = sum(float(v['valor_total'] or 0) for v in vendas_rows)
+    adiant_sem = sum(float(a['valor'] or 0) for a in adiantamentos_rows)
+    adiant_juros = sum(float(a['valor_juros'] or 0) for a in adiantamentos_rows)
+    adiant_total = sum(float(a['valor_total'] or 0) for a in adiantamentos_rows)
+    total = saldo_vendas + adiant_total
+    texto = f"""Café Boa Vista\nAcerto do cliente\n\nCliente: {pessoa['nome']}\nVendas pendentes: {br_money(saldo_vendas)}\nValores que pegou: {br_money(adiant_sem)}\nJuros dos valores: {br_money(adiant_juros)}\nTotal para acerto: {br_money(total)}"""
+    return dict(pessoa=pessoa, vendas=vendas_rows, adiantamentos=adiantamentos_rows, estoque_tipo=estoque_tipo,
+                saldo_vendas=saldo_vendas, adiant_sem=adiant_sem, adiant_juros=adiant_juros,
+                adiant_total=adiant_total, total=total, texto_whatsapp=texto, hoje=today())
+
+
 def fnum(name):
     val = request.form.get(name)
     if isinstance(val, str):
@@ -232,6 +262,73 @@ def fnum(name):
 
 
 def today(): return date.today().isoformat()
+
+
+def meses_juros_automatico(data_inicio, data_base=None):
+    """Calcula meses completos entre a data que pegou e hoje.
+    Ex.: 02/03 até 02/04 = 1 mês. Antes de virar o dia, não conta o novo mês.
+    """
+    try:
+        inicio = datetime.strptime((data_inicio or today())[:10], '%Y-%m-%d').date()
+    except Exception:
+        inicio = date.today()
+    base = data_base or date.today()
+    meses = (base.year - inicio.year) * 12 + (base.month - inicio.month)
+    if base.day < inicio.day:
+        meses -= 1
+    return max(0, meses)
+
+
+def calcular_juros_simples(valor, taxa, meses):
+    valor = float(valor or 0)
+    taxa = float(taxa or 0)
+    meses = float(meses or 0)
+    juros = valor * (taxa / 100) * meses
+    return juros, valor + juros
+
+
+def adiantamento_em_aberto(row):
+    status = str(row['status'] or 'Aberto').strip().lower()
+    return status not in ('pago', 'paga', 'quitado', 'quitada')
+
+
+def adiantamento_com_juros_atual(row):
+    """Retorna o adiantamento recalculado pela data de hoje.
+    Isso evita mostrar juros antigo mesmo quando o banco ainda guardou meses=0.
+    """
+    item = dict(row)
+    if adiantamento_em_aberto(row):
+        meses = meses_juros_automatico(item.get('data'))
+        juros, total = calcular_juros_simples(item.get('valor'), item.get('taxa_juros'), meses)
+        item['meses_atraso'] = meses
+        item['valor_juros'] = juros
+        item['valor_total'] = total
+    return item
+
+
+def atualizar_adiantamentos_abertos(pessoa_id=None):
+    """Atualiza juros dos valores pegos em aberto conforme a data atual.
+    Assim o total muda sozinho quando vira o mês, sem o cliente editar nada.
+    """
+    try:
+        if pessoa_id:
+            rows = fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? AND UPPER(TRIM(COALESCE(status,'Aberto'))) NOT IN ('PAGO','PAGA','QUITADO','QUITADA')", (pessoa_id,))
+        else:
+            rows = fetchall("SELECT * FROM adiantamentos WHERE UPPER(TRIM(COALESCE(status,'Aberto'))) NOT IN ('PAGO','PAGA','QUITADO','QUITADA')")
+        if not rows:
+            return
+        con = db()
+        for a in rows:
+            meses = meses_juros_automatico(a['data'])
+            juros, total = calcular_juros_simples(a['valor'], a['taxa_juros'], meses)
+            con.execute("UPDATE adiantamentos SET meses_atraso=?, valor_juros=?, valor_total=? WHERE id=?",
+                        (meses, juros, total, a['id']))
+        con.commit(); con.close()
+    except Exception as exc:
+        try:
+            print('Erro ao atualizar juros dos valores pegos:', exc)
+        except Exception:
+            pass
 
 
 def lote_estoque_expr():
@@ -266,15 +363,133 @@ def update_all_status():
     for i in ids: update_compra_status(i)
 
 
-def get_pessoas_choices(where=""):
-    sql = "SELECT * FROM pessoas"
-    if where: sql += " WHERE " + where
-    return fetchall(sql + " ORDER BY nome")
+def usuario_count():
+    try:
+        row = fetchone("SELECT COUNT(*) c FROM usuarios")
+        return int(row['c'] or 0)
+    except Exception:
+        return 0
+
+
+def usuario_logado():
+    uid = session.get('usuario_id')
+    if not uid:
+        return None
+    return fetchone("SELECT id, usuario, nome, tipo FROM usuarios WHERE id=?", (uid,))
+
+
+app.jinja_env.globals['usuario_logado'] = usuario_logado
+
+
+@app.before_request
+def exigir_login():
+    liberadas = {'login', 'configurar_admin', 'static'}
+    if request.endpoint in liberadas or (request.endpoint or '').startswith('static'):
+        return
+    if usuario_count() == 0:
+        return redirect(url_for('configurar_admin'))
+    if not session.get('usuario_id'):
+        return redirect(url_for('login', next=request.path))
+
+
+@app.route('/configurar-admin', methods=['GET','POST'])
+def configurar_admin():
+    if usuario_count() > 0:
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        usuario = (request.form.get('usuario') or '').strip()
+        nome = (request.form.get('nome') or '').strip() or 'Administrador'
+        senha = request.form.get('senha') or ''
+        confirmar = request.form.get('confirmar') or ''
+        if not usuario or not senha:
+            flash('Informe o usuário e a senha.')
+            return redirect(url_for('configurar_admin'))
+        if len(senha) < 4:
+            flash('Use uma senha com pelo menos 4 caracteres.')
+            return redirect(url_for('configurar_admin'))
+        if senha != confirmar:
+            flash('As senhas não conferem.')
+            return redirect(url_for('configurar_admin'))
+        con = db(); cur = con.cursor()
+        cur.execute("INSERT INTO usuarios (usuario,senha_hash,nome,tipo,criado_em) VALUES (?,?,?,?,?)",
+                    (usuario, generate_password_hash(senha), nome, 'Administrador', datetime.now().isoformat(timespec='seconds')))
+        user_id = cur.lastrowid
+        con.commit(); con.close()
+        session['usuario_id'] = user_id
+        session['usuario_nome'] = nome
+        log_acao('Administrador configurado', 'usuario', user_id, usuario)
+        flash('Administrador criado. O sistema está protegido por senha.')
+        return redirect(url_for('index'))
+    return render_template('configurar_admin.html')
+
+
+@app.route('/login', methods=['GET','POST'])
+def login():
+    if usuario_count() == 0:
+        return redirect(url_for('configurar_admin'))
+    if request.method == 'POST':
+        usuario = (request.form.get('usuario') or '').strip()
+        senha = request.form.get('senha') or ''
+        row = fetchone("SELECT * FROM usuarios WHERE usuario=?", (usuario,))
+        if not row or not check_password_hash(row['senha_hash'], senha):
+            flash('Usuário ou senha incorretos.')
+            return redirect(url_for('login'))
+        session['usuario_id'] = row['id']
+        session['usuario_nome'] = row['nome'] or row['usuario']
+        log_acao('Login realizado', 'usuario', row['id'], usuario)
+        destino = request.args.get('next') or url_for('index')
+        return redirect(destino)
+    return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('Você saiu do sistema.')
+    return redirect(url_for('login'))
+
+
+@app.route('/administrador', methods=['GET','POST'])
+def administrador():
+    user = usuario_logado()
+    if not user:
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        usuario = (request.form.get('usuario') or '').strip()
+        nome = (request.form.get('nome') or '').strip() or 'Administrador'
+        senha_atual = request.form.get('senha_atual') or ''
+        nova_senha = request.form.get('nova_senha') or ''
+        confirmar = request.form.get('confirmar') or ''
+        atual = fetchone("SELECT * FROM usuarios WHERE id=?", (user['id'],))
+        if not check_password_hash(atual['senha_hash'], senha_atual):
+            flash('Senha atual incorreta.')
+            return redirect(url_for('administrador'))
+        if nova_senha and nova_senha != confirmar:
+            flash('A nova senha e a confirmação não conferem.')
+            return redirect(url_for('administrador'))
+        if nova_senha and len(nova_senha) < 4:
+            flash('A nova senha precisa ter pelo menos 4 caracteres.')
+            return redirect(url_for('administrador'))
+        try:
+            con = db()
+            if nova_senha:
+                con.execute("UPDATE usuarios SET usuario=?, nome=?, senha_hash=? WHERE id=?", (usuario, nome, generate_password_hash(nova_senha), user['id']))
+            else:
+                con.execute("UPDATE usuarios SET usuario=?, nome=? WHERE id=?", (usuario, nome, user['id']))
+            con.commit(); con.close()
+            session['usuario_nome'] = nome
+            log_acao('Administrador atualizado', 'usuario', user['id'], usuario)
+            flash('Dados do administrador atualizados.')
+        except sqlite3.IntegrityError:
+            flash('Esse usuário já está em uso.')
+        return redirect(url_for('administrador'))
+    return render_template('administrador.html', user=user)
 
 
 @app.route('/')
 def index():
     update_all_status()
+    atualizar_adiantamentos_abertos()
     total_compras = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM compras")['v']
     total_vendas = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas")['v']
     sacas_compradas = fetchone("SELECT COALESCE(SUM(quantidade_sacas),0) v FROM compras")['v']
@@ -351,12 +566,12 @@ def clientes():
     return render_template('clientes.html', clientes=rows, q=q)
 
 
-def calcular_adiantamento(valor, taxa, meses):
-    valor = float(valor or 0)
-    taxa = float(taxa or 0)
-    meses = float(meses or 0)
-    juros = valor * (taxa / 100) * meses
-    return juros, valor + juros
+def calcular_adiantamento(valor, taxa, data_inicio=None, meses=None):
+    # Agora os meses são calculados automaticamente pela data que o cliente pegou.
+    # Mantém o parâmetro meses por compatibilidade, mas a regra principal é pela data.
+    meses_calc = meses_juros_automatico(data_inicio) if data_inicio else float(meses or 0)
+    juros, total = calcular_juros_simples(valor, taxa, meses_calc)
+    return meses_calc, juros, total
 
 
 @app.route('/clientes/<int:pessoa_id>/adiantamentos', methods=['POST'])
@@ -366,10 +581,9 @@ def adicionar_adiantamento(pessoa_id):
         flash('Cliente não encontrado.'); return redirect(url_for('clientes'))
     valor = fnum('valor')
     taxa = fnum('taxa_juros')
-    meses = fnum('meses_atraso')
     data = request.form.get('data') or today()
     obs = request.form.get('observacao') or ''
-    juros, total = calcular_adiantamento(valor, taxa, meses)
+    meses, juros, total = calcular_adiantamento(valor, taxa, data_inicio=data)
     if valor <= 0:
         flash('Informe o valor que o cliente pegou.')
         return redirect(url_for('painel_cliente', pessoa_id=pessoa_id))
@@ -417,6 +631,7 @@ def painel_cliente(pessoa_id):
     pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
     if not pessoa:
         flash('Cliente não encontrado.'); return redirect(url_for('pessoas'))
+    atualizar_adiantamentos_abertos(pessoa_id)
     taxa = float(request.args.get('taxa_juros') or 0)
     meses = float(request.args.get('meses_atraso') or 0)
     vendas_rows = fetchall("""SELECT v.*, c.lote lote_compra FROM vendas v LEFT JOIN compras c ON c.id=v.compra_id WHERE v.pessoa_id=? ORDER BY v.id DESC""", (pessoa_id,))
@@ -429,10 +644,11 @@ def painel_cliente(pessoa_id):
     saldo_tipo = fetchall("""SELECT COALESCE(tipo_cafe,'Sem tipo') tipo, SUM(valor_total) valor, SUM(quantidade_sacas) sacas
         FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente' GROUP BY COALESCE(tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
     saldo_pendente = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))['v']
-    adiantamentos = fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? ORDER BY data DESC, id DESC", (pessoa_id,))
-    total_adiantamentos = fetchone("SELECT COALESCE(SUM(valor),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
-    juros_adiantamentos = fetchone("SELECT COALESCE(SUM(valor_juros),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
-    total_adiantamentos_juros = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
+    adiantamentos = [adiantamento_com_juros_atual(a) for a in fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? ORDER BY data DESC, id DESC", (pessoa_id,))]
+    adiantamentos_abertos = [a for a in adiantamentos if adiantamento_em_aberto(a)]
+    total_adiantamentos = sum(float(a.get('valor') or 0) for a in adiantamentos_abertos)
+    juros_adiantamentos = sum(float(a.get('valor_juros') or 0) for a in adiantamentos_abertos)
+    total_adiantamentos_juros = sum(float(a.get('valor_total') or 0) for a in adiantamentos_abertos)
     juros = saldo_pendente * (taxa/100) * meses
     return render_template('cliente_painel.html', pessoa=pessoa, vendas=vendas_rows, compras=compras_rows, provas=provas_rows,
                            estoque_tipo=estoque_tipo, saldo_tipo=saldo_tipo, saldo_pendente=saldo_pendente,
@@ -802,41 +1018,53 @@ def extrato_cliente(pessoa_id):
     pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
     if not pessoa:
         flash('Cliente não encontrado.'); return redirect(url_for('clientes'))
+    atualizar_adiantamentos_abertos(pessoa_id)
     vendas_rows = fetchall("SELECT * FROM vendas WHERE pessoa_id=? ORDER BY data DESC, id DESC", (pessoa_id,))
     compras_rows = fetchall(f"""SELECT c.*, ({lote_estoque_expr()}) estoque_lote,
         COALESCE((SELECT SUM(v.quantidade_sacas) FROM vendas v WHERE v.compra_id=c.id),0) vendido
         FROM compras c WHERE c.pessoa_id=? ORDER BY data DESC, id DESC""", (pessoa_id,))
     provas_rows = fetchall("SELECT * FROM provas WHERE pessoa_id=? ORDER BY data DESC, id DESC", (pessoa_id,))
-    adiantamentos_rows = fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? ORDER BY data DESC, id DESC", (pessoa_id,))
+    adiantamentos_rows = [adiantamento_com_juros_atual(a) for a in fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? ORDER BY data DESC, id DESC", (pessoa_id,))]
     estoque_tipo = fetchall(f"""SELECT COALESCE(c.tipo_cafe,'Sem tipo') tipo, SUM({lote_estoque_expr()}) sacas, SUM(({lote_estoque_expr()}) * c.valor_saca) valor
         FROM compras c WHERE c.pessoa_id=? GROUP BY COALESCE(c.tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
     saldo_vendas = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))['v']
-    adiant_sem = fetchone("SELECT COALESCE(SUM(valor),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
-    adiant_juros = fetchone("SELECT COALESCE(SUM(valor_juros),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
-    adiant_total = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
+    adiantamentos_abertos = [a for a in adiantamentos_rows if adiantamento_em_aberto(a)]
+    adiant_sem = sum(float(a.get('valor') or 0) for a in adiantamentos_abertos)
+    adiant_juros = sum(float(a.get('valor_juros') or 0) for a in adiantamentos_abertos)
+    adiant_total = sum(float(a.get('valor_total') or 0) for a in adiantamentos_abertos)
     texto = f"""Café Boa Vista\nExtrato do cliente\n\nCliente: {pessoa['nome']}\nSaldo vendas pendentes: {br_money(saldo_vendas)}\nValores pegos sem juros: {br_money(adiant_sem)}\nJuros: {br_money(adiant_juros)}\nTotal para acerto: {br_money(saldo_vendas + adiant_total)}"""
     return render_template('extrato_cliente.html', pessoa=pessoa, vendas=vendas_rows, compras=compras_rows, provas=provas_rows,
                            adiantamentos=adiantamentos_rows, estoque_tipo=estoque_tipo, saldo_vendas=saldo_vendas,
                            adiant_sem=adiant_sem, adiant_juros=adiant_juros, adiant_total=adiant_total, texto_whatsapp=texto)
 
 
+
+@app.route('/clientes/<int:pessoa_id>/acerto')
+def acerto_cliente(pessoa_id):
+    dados = get_acerto_data(pessoa_id)
+    if not dados:
+        flash('Cliente não encontrado.'); return redirect(url_for('clientes'))
+    return render_template('acerto_cliente.html', **dados)
+
 @app.route('/clientes/<int:pessoa_id>/acertar-tudo', methods=['POST'])
 def acertar_tudo_cliente(pessoa_id):
-    pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
-    if not pessoa:
+    dados = get_acerto_data(pessoa_id)
+    if not dados:
         flash('Cliente não encontrado.'); return redirect(url_for('clientes'))
-    saldo_vendas = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))['v']
-    total_adiant = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM adiantamentos WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))['v']
-    total = float(saldo_vendas or 0) + float(total_adiant or 0)
+    pessoa = dados['pessoa']; total = dados['total']
+    vendas_ids = [v['id'] for v in dados['vendas']]
+    adiant_ids = [a['id'] for a in dados['adiantamentos']]
     con = db()
-    con.execute("UPDATE vendas SET status_recebimento='Recebido' WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))
-    con.execute("UPDATE financeiro SET status='Pago' WHERE origem LIKE 'venda:%' AND descricao LIKE ?", (f"%{pessoa['nome']}%",))
-    con.execute("UPDATE adiantamentos SET status='Pago' WHERE pessoa_id=? AND status='Aberto'", (pessoa_id,))
+    for vid in vendas_ids:
+        con.execute("UPDATE vendas SET status_recebimento='Recebido' WHERE id=?", (vid,))
+        con.execute("UPDATE financeiro SET status='Pago' WHERE origem=?", (f"venda:{vid}",))
+    for aid in adiant_ids:
+        con.execute("UPDATE adiantamentos SET status='Pago' WHERE id=?", (aid,))
     con.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
                 (today(), 'Entrada', f"Acerto geral - {pessoa['nome']}", 'Acerto de cliente', total, 'Pago', f"acerto:{pessoa_id}:{datetime.now().timestamp()}"))
     con.commit(); con.close()
     log_acao('Acerto geral do cliente', 'pessoa', pessoa_id, f'Total acertado: {br_money(total)}')
-    flash('Acerto geral lançado. Vendas e valores pegos foram marcados como pagos.')
+    flash('Acerto geral confirmado. Vendas pendentes e valores pegos foram marcados como pagos.')
     return redirect(url_for('painel_cliente', pessoa_id=pessoa_id))
 
 
@@ -872,7 +1100,8 @@ def backup():
         flash('Backup restaurado. Faça redeploy/reinicie o app se alguma tela não atualizar na hora.')
         return redirect(url_for('backup'))
     historico_rows = fetchall("SELECT * FROM historico ORDER BY id DESC LIMIT 80")
-    return render_template('backup.html', historico=historico_rows)
+    last_backup = fetchone("SELECT * FROM historico WHERE acao LIKE 'Backup%' ORDER BY id DESC LIMIT 1")
+    return render_template('backup.html', historico=historico_rows, last_backup=last_backup)
 
 
 @app.route('/backup/baixar')
