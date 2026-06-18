@@ -2,6 +2,28 @@
 <div class="hero card"><div><span class="eyebrow">PAINEL DO CLIENTE</span><h1>{{ pessoa.nome }}</h1><p class="subtitle">Vendas, provas, estoque ainda disponível, valores pegados e saldo por tipo de café.</p></div><div class="hero-note"><b>{{ pessoa.tipo }}</b><p>{{ pessoa.whatsapp or pessoa.telefone or 'Sem telefone' }}<br>{{ pessoa.fazenda or pessoa.cidade or '' }}</p><div class="actions"><a class="mini" href="{{ url_for('editar_pessoa', pessoa_id=pessoa.id) }}">Editar cliente</a><form method="post" action="{{ url_for('excluir_pessoa', pessoa_id=pessoa.id) }}" onsubmit="return confirm('Excluir cliente? O histórico será mantido sem vínculo.');"><button class="mini danger">Excluir</button></form></div></div></div>
 <div class="quick"><a class="btn" href="{{ url_for('acerto_cliente', pessoa_id=pessoa.id) }}" target="_blank">Fazer acerto</a><a class="btn light" href="{{ url_for('extrato_cliente', pessoa_id=pessoa.id) }}" target="_blank">Gerar extrato</a><form method="post" action="{{ url_for('acertar_tudo_cliente', pessoa_id=pessoa.id) }}" onsubmit="return confirm('Marcar vendas pendentes e valores pegos como pagos e lançar acerto no financeiro?');"><button class="btn light">Acertar tudo direto</button></form></div>
 
+<div class="card"><h2>Dados para pagamento do cliente</h2><p class="subtitle">Cadastre CPF, bancos, contas e Pix do cliente para consultar na hora de pagar uma venda parcial.</p>
+  <div class="grid2">
+    <div>
+      <p><b>CPF/CNPJ:</b> {{ pessoa.documento or '-' }}</p>
+      <p><b>WhatsApp:</b> {{ pessoa.whatsapp or pessoa.telefone or '-' }}</p>
+      <p><b>Fazenda/Sítio:</b> {{ pessoa.fazenda or '-' }}</p>
+    </div>
+    <form method="post" action="{{ url_for('adicionar_conta_cliente', pessoa_id=pessoa.id) }}" class="form">
+      <div><label>Banco</label><input name="banco" placeholder="Ex: Sicoob, Banco do Brasil"></div>
+      <div><label>Agência</label><input name="agencia"></div>
+      <div><label>Conta</label><input name="conta"></div>
+      <div><label>Tipo de conta</label><input name="tipo_conta" placeholder="Corrente, poupança..."></div>
+      <div><label>Pix</label><input name="pix" placeholder="CPF, telefone, e-mail ou chave aleatória"></div>
+      <div><label>Titular</label><input name="titular" value="{{ pessoa.nome }}"></div>
+      <div><label>CPF do titular</label><input name="cpf" value="{{ pessoa.documento or '' }}"></div>
+      <div><label>Observação</label><input name="observacao" placeholder="Ex: Pix do Banco do Brasil, conta do filho..."></div>
+      <button class="btn">Salvar conta/Pix</button>
+    </form>
+  </div>
+  <table style="margin-top:14px"><tr><th>Banco</th><th>Agência</th><th>Conta</th><th>Pix</th><th>Titular/CPF</th><th>Obs.</th><th>Ações</th></tr>{% for c in contas %}<tr><td>{{ c.banco or '-' }}</td><td>{{ c.agencia or '-' }}</td><td>{{ c.conta or '-' }}<br><small>{{ c.tipo_conta or '' }}</small></td><td>{{ c.pix or '-' }}</td><td>{{ c.titular or pessoa.nome }}<br><small>{{ c.cpf or pessoa.documento or '' }}</small></td><td>{{ c.observacao or '-' }}</td><td><form method="post" action="{{ url_for('excluir_conta_cliente', conta_id=c.id) }}" onsubmit="return confirm('Excluir essa conta/Pix?');"><button class="mini danger">Excluir</button></form></td></tr>{% else %}<tr><td colspan="7">Nenhuma conta/Pix cadastrada para esse cliente.</td></tr>{% endfor %}</table>
+</div>
+
 <div class="grid metrics"><div class="card metric"><small>Saldo vendas pendentes</small><strong>{{ saldo_pendente|money }}</strong></div><div class="card metric"><small>Valores pegados sem juros</small><strong>{{ total_adiantamentos|money }}</strong></div><div class="card metric warn"><small>Juros dos valores pegados</small><strong>{{ juros_adiantamentos|money }}</strong></div><div class="card metric good"><small>Total para acerto</small><strong>{{ (saldo_pendente + total_adiantamentos_juros)|money }}</strong></div></div>
 
 <div class="card"><h2>Valores que o cliente pegou</h2><p class="subtitle">Use para lançar cada valor separadamente. Exemplo: pegou R$ 800,00 em 02/03 e R$ 1.000,00 em 05/04. Cada lançamento calcula os meses automaticamente pela data que o cliente pegou. Quando virar o mês, o juros atualiza sozinho no painel, no extrato e no acerto.</p>
@@ -23,7 +45,7 @@
 
 <div class="row"><div class="card"><h2>Saldo pendente por tipo de café</h2><table><tr><th>Tipo</th><th>Sacas</th><th>Valor</th></tr>{% for s in saldo_tipo %}<tr><td>{{ s.tipo }}</td><td>{{ s.sacas|num }}</td><td>{{ s.valor|money }}</td></tr>{% endfor %}</table></div><div class="card"><h2>Estoque ainda para vender</h2><table><tr><th>Tipo</th><th>Sacas</th><th>Valor estimado</th></tr>{% for e in estoque_tipo %}<tr><td>{{ e.tipo }}</td><td>{{ e.sacas|num }}</td><td>{{ e.valor|money }}</td></tr>{% endfor %}</table></div></div>
 
-<div class="card"><h2>Todas as vendas do cliente</h2><table><tr><th>Data</th><th>Tipo</th><th>Lote</th><th>Sacas</th><th>Preço/saca</th><th>Juros</th><th>Total</th><th>Status</th><th>Ações</th></tr>{% for v in vendas %}<tr><td>{{ v.data }}</td><td>{{ v.tipo_cafe or '-' }}</td><td>{{ v.lote or '-' }}</td><td>{{ v.quantidade_sacas|num }}</td><td>{{ v.valor_saca|money }}</td><td>{{ v.valor_juros|money }}</td><td>{{ v.valor_total|money }}</td><td><span class="badge {% if v.status_recebimento=='Recebido' %}ok{% else %}bad{% endif %}">{{ v.status_recebimento }}</span></td><td><a class="mini" href="{{ url_for('editar_venda', venda_id=v.id) }}">Editar</a></td></tr>{% endfor %}</table></div>
+<div class="card"><h2>Todas as vendas do cliente</h2><table><tr><th>Data</th><th>Tipo</th><th>Lote</th><th>Sacas</th><th>Preço/saca</th><th>Juros</th><th>Total</th><th>Status</th><th>Ações</th></tr>{% for v in vendas %}<tr><td>{{ v.data }}</td><td>{{ v.tipo_cafe or '-' }}</td><td>{{ v.lote or '-' }}</td><td>{{ v.quantidade_sacas|num }}</td><td>{{ v.valor_saca|money }}</td><td>{{ v.valor_juros|money }}</td><td>{{ v.valor_total|money }}</td><td><span class="badge {% if v.status_recebimento=='Recebido' %}ok{% else %}bad{% endif %}">{% if v.status_recebimento in ['Pago ao cliente','Recebido'] %}Pago ao cliente{% elif v.status_recebimento in ['A pagar ao cliente','Pendente'] %}A pagar ao cliente{% else %}{{ v.status_recebimento }}{% endif %}</span></td><td><a class="mini" href="{{ url_for('editar_venda', venda_id=v.id) }}">Editar</a></td></tr>{% endfor %}</table></div>
 
 <div class="card"><h2>Lotes/compras deste cliente</h2><table><tr><th>Data</th><th>Tipo</th><th>Lote</th><th>Comprado</th><th>Vendido</th><th>Estoque</th><th>Status</th><th>Ações</th></tr>{% for c in compras %}<tr><td>{{ c.data }}</td><td>{{ c.tipo_cafe or '-' }}</td><td>{{ c.lote or '-' }}</td><td>{{ c.quantidade_sacas|num }}</td><td>{{ c.vendido|num }}</td><td><b>{{ c.estoque_lote|num }}</b></td><td><span class="badge {% if c.estoque_lote>0 %}ok{% endif %}">{{ c.status_lote }}</span></td><td><a class="mini" href="{{ url_for('historico_lote', compra_id=c.id) }}" target="_blank">Histórico</a><a class="mini" href="{{ url_for('editar_compra', compra_id=c.id) }}">Editar</a></td></tr>{% endfor %}</table></div>
 

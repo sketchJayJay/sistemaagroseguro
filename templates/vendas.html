@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% block content %}
-<h1>Vendas de café</h1><p class="subtitle">Venda por lote com tipo de café, juros por atraso, lucro automático, edição e exclusão.</p>
+<h1>Vendas de café do cliente</h1><p class="subtitle">Registre quando o cliente vender café de um lote. O sistema baixa o saldo e guarda o histórico.</p>
 <div class="card">
   <form method="post" class="form">
     <div><label>Data</label><input type="date" name="data" value="{{ hoje }}" required></div>
@@ -13,8 +13,8 @@
     <div><label>Custo/saca avulso</label><input type="number" step="0.01" name="custo_saca" placeholder="Só se não escolher lote"></div>
     <div><label>Taxa juros % ao mês</label><input type="number" step="0.01" name="juros_percentual" value="0"></div>
     <div><label>Meses em atraso</label><input type="number" step="0.01" name="meses_atraso" value="0"></div>
-    <div><label>Forma recebimento</label><input name="forma_pagamento" placeholder="Pix, boleto..."></div>
-    <div><label>Recebimento</label><select name="status_recebimento"><option>Pendente</option><option>Recebido</option></select></div>
+    <div><label>Forma de pagamento ao cliente</label><input name="forma_pagamento" placeholder="Pix, Sicoob, dinheiro..."></div>
+    <div><label>Pagamento ao cliente</label><select name="status_recebimento"><option value="A pagar ao cliente">A pagar ao cliente</option><option value="Pago ao cliente">Pago ao cliente</option></select></div>
     <div class="span"><label>Observação</label><input name="observacao"></div>
     <button class="btn">Lançar venda</button>
   </form>

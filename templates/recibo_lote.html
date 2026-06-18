@@ -30,7 +30,7 @@
     <p><b>Lote:</b> {{ compra.lote or ('Lote ' ~ compra.id) }}</p>
     <p><b>Tipo de café:</b> {{ compra.tipo_cafe or '-' }}</p>
     <p><b>Data da compra:</b> {{ compra.data }}</p>
-    <p><b>Valor original por saca:</b> {{ compra.valor_saca|money }}</p>
+    <p><b>Preço simbólico/referência por saca:</b> {{ compra.valor_saca|money }}</p>
     <p><b>Status atual:</b> {% if restante<=0 %}Vendido total{% elif vendido>0 %}Vendido parcial{% else %}Em estoque{% endif %}</p>
 
     <hr>
@@ -46,7 +46,7 @@
           <td>{{ v.valor_saca|money }}</td>
           <td>{{ v.valor_juros|money }}</td>
           <td><b>{{ v.valor_total|money }}</b></td>
-          <td>{% if v.status_recebimento=='Recebido' %}Pago ao cliente{% else %}A pagar ao cliente{% endif %}</td>
+          <td>{% if v.status_recebimento in ['Pago ao cliente','Recebido'] %}Pago ao cliente{% else %}A pagar ao cliente{% endif %}</td>
           <td>{{ v.observacao or '-' }}</td>
         </tr>
         {% endfor %}

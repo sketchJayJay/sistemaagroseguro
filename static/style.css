@@ -77,3 +77,5 @@ table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;
 /* Ajuste balcão de café: prova rápida e acerto */
 .prova-rapida{grid-template-columns:repeat(4,minmax(160px,1fr))}.btn-save-prova{font-size:16px;min-height:48px}.span-full{grid-column:1/-1}.advanced{background:#f6fbf6;border:1px solid #d9ead9;border-radius:16px;padding:12px;margin-top:4px}.advanced summary{cursor:pointer;font-weight:800;color:#15682a}.advanced-grid{margin-top:12px;margin-bottom:0}.quick-entry-card{border:2px solid #cfe8d2}
 @media(max-width:760px){.prova-rapida{grid-template-columns:1fr}.btn-save-prova{width:100%;position:sticky;bottom:10px;z-index:5}.search{display:grid}.search input{max-width:none}.card table{min-width:720px}.quick-entry-card{padding:14px}.print .quick form{width:100%}.print .quick form button{width:100%}}
+.sale-box{border-top:2px solid #2fa84f; padding-top:14px; margin-top:8px}
+.account-card{background:#f4fbf4;border:1px solid var(--line);border-radius:18px;padding:14px;margin-top:10px}

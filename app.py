@@ -184,6 +184,20 @@ def init_db():
         tipo TEXT DEFAULT 'Administrador',
         criado_em TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS contas_cliente (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pessoa_id INTEGER NOT NULL,
+        banco TEXT,
+        agencia TEXT,
+        conta TEXT,
+        tipo_conta TEXT,
+        pix TEXT,
+        titular TEXT,
+        cpf TEXT,
+        observacao TEXT,
+        criado_em TEXT NOT NULL,
+        FOREIGN KEY(pessoa_id) REFERENCES pessoas(id)
+    );
     """)
     for table, cols in {
         'pessoas': [('documento','TEXT'),('whatsapp','TEXT'),('endereco','TEXT'),('fazenda','TEXT')],
@@ -193,7 +207,8 @@ def init_db():
         'financeiro': [('categoria','TEXT')],
         'adiantamentos': [('taxa_juros','REAL DEFAULT 0'),('meses_atraso','REAL DEFAULT 0'),('valor_juros','REAL DEFAULT 0'),('valor_total','REAL DEFAULT 0'),('observacao','TEXT'),('status',"TEXT DEFAULT 'Aberto'"),('criado_em','TEXT')],
         'historico': [('entidade','TEXT'),('entidade_id','INTEGER'),('detalhe','TEXT')],
-        'usuarios': [('nome','TEXT'),('tipo',"TEXT DEFAULT 'Administrador'")]
+        'usuarios': [('nome','TEXT'),('tipo',"TEXT DEFAULT 'Administrador'")],
+        'contas_cliente': [('banco','TEXT'),('agencia','TEXT'),('conta','TEXT'),('tipo_conta','TEXT'),('pix','TEXT'),('titular','TEXT'),('cpf','TEXT'),('observacao','TEXT'),('criado_em','TEXT')]
     }.items():
         for column, definition in cols:
             add_column(cur, table, column, definition)
@@ -252,7 +267,7 @@ def get_acerto_data(pessoa_id):
     if not pessoa:
         return None
     atualizar_adiantamentos_abertos(pessoa_id)
-    vendas_rows = fetchall("SELECT * FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente' ORDER BY data DESC, id DESC", (pessoa_id,))
+    vendas_rows = fetchall("SELECT * FROM vendas WHERE pessoa_id=? AND status_recebimento IN ('Pendente','A pagar ao cliente') ORDER BY data DESC, id DESC", (pessoa_id,))
     adiantamentos_rows = [adiantamento_com_juros_atual(a) for a in fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? AND UPPER(TRIM(COALESCE(status,'Aberto'))) NOT IN ('PAGO','PAGA','QUITADO','QUITADA') ORDER BY data DESC, id DESC", (pessoa_id,))]
     estoque_tipo = fetchall(f"""SELECT COALESCE(c.tipo_cafe,'Sem tipo') tipo, SUM({lote_estoque_expr()}) sacas, SUM(({lote_estoque_expr()}) * c.valor_saca) valor
         FROM compras c WHERE c.pessoa_id=? GROUP BY COALESCE(c.tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
@@ -570,19 +585,20 @@ def painel_cliente(pessoa_id):
     estoque_tipo = fetchall(f"""SELECT COALESCE(c.tipo_cafe,'Sem tipo') tipo, SUM({lote_estoque_expr()}) sacas, SUM(({lote_estoque_expr()}) * c.valor_saca) valor
         FROM compras c WHERE c.pessoa_id=? GROUP BY COALESCE(c.tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
     saldo_tipo = fetchall("""SELECT COALESCE(tipo_cafe,'Sem tipo') tipo, SUM(valor_total) valor, SUM(quantidade_sacas) sacas
-        FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente' GROUP BY COALESCE(tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
-    saldo_pendente = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))['v']
+        FROM vendas WHERE pessoa_id=? AND status_recebimento IN ('Pendente','A pagar ao cliente') GROUP BY COALESCE(tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
+    saldo_pendente = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento IN ('Pendente','A pagar ao cliente')", (pessoa_id,))['v']
     adiantamentos = [adiantamento_com_juros_atual(a) for a in fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? ORDER BY data DESC, id DESC", (pessoa_id,))]
     adiantamentos_abertos = [a for a in adiantamentos if adiantamento_em_aberto(a)]
     total_adiantamentos = sum(float(a.get('valor') or 0) for a in adiantamentos_abertos)
     juros_adiantamentos = sum(float(a.get('valor_juros') or 0) for a in adiantamentos_abertos)
     total_adiantamentos_juros = sum(float(a.get('valor_total') or 0) for a in adiantamentos_abertos)
     juros = saldo_pendente * (taxa/100) * meses
+    contas = fetchall("SELECT * FROM contas_cliente WHERE pessoa_id=? ORDER BY id DESC", (pessoa_id,))
     return render_template('cliente_painel.html', pessoa=pessoa, vendas=vendas_rows, compras=compras_rows, provas=provas_rows,
                            estoque_tipo=estoque_tipo, saldo_tipo=saldo_tipo, saldo_pendente=saldo_pendente,
                            taxa=taxa, meses=meses, juros=juros, total_com_juros=saldo_pendente+juros, tipos_cafe=TIPOS_CAFE,
                            adiantamentos=adiantamentos, total_adiantamentos=total_adiantamentos,
-                           juros_adiantamentos=juros_adiantamentos, total_adiantamentos_juros=total_adiantamentos_juros, hoje=today())
+                           juros_adiantamentos=juros_adiantamentos, total_adiantamentos_juros=total_adiantamentos_juros, contas=contas, hoje=today())
 
 
 @app.route('/clientes/<int:pessoa_id>/aplicar-juros', methods=['POST'])
@@ -592,7 +608,7 @@ def aplicar_juros_cliente(pessoa_id):
         flash('Cliente não encontrado.'); return redirect(url_for('clientes'))
     taxa = fnum('taxa_juros')
     meses = fnum('meses_atraso')
-    saldo = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))['v']
+    saldo = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento IN ('Pendente','A pagar ao cliente')", (pessoa_id,))['v']
     juros = float(saldo or 0) * (taxa/100) * meses
     if juros <= 0:
         flash('Nenhum juros para aplicar. Confira taxa, meses e saldo pendente.')
@@ -603,6 +619,43 @@ def aplicar_juros_cliente(pessoa_id):
     con.commit(); con.close()
     flash('Juros lançado no financeiro como entrada pendente.')
     return redirect(url_for('painel_cliente', pessoa_id=pessoa_id, taxa_juros=taxa, meses_atraso=meses))
+
+
+@app.route('/clientes/<int:pessoa_id>/contas', methods=['POST'])
+def adicionar_conta_cliente(pessoa_id):
+    pessoa = fetchone("SELECT * FROM pessoas WHERE id=?", (pessoa_id,))
+    if not pessoa:
+        flash('Cliente não encontrado.'); return redirect(url_for('pessoas'))
+    banco = request.form.get('banco') or ''
+    agencia = request.form.get('agencia') or ''
+    conta = request.form.get('conta') or ''
+    pix = request.form.get('pix') or ''
+    titular = request.form.get('titular') or pessoa['nome']
+    cpf = request.form.get('cpf') or pessoa['documento'] or ''
+    obs = request.form.get('observacao') or ''
+    if not any([banco, agencia, conta, pix, obs]):
+        flash('Conta/Pix não salva: preencha banco, conta ou Pix.')
+        return redirect(url_for('painel_cliente', pessoa_id=pessoa_id))
+    con = db(); cur = con.cursor()
+    cur.execute("""INSERT INTO contas_cliente (pessoa_id,banco,agencia,conta,tipo_conta,pix,titular,cpf,observacao,criado_em)
+                 VALUES (?,?,?,?,?,?,?,?,?,?)""", (pessoa_id,banco,agencia,conta,request.form.get('tipo_conta') or '',pix,titular,cpf,obs,datetime.now().isoformat()))
+    cid = cur.lastrowid
+    con.commit(); con.close()
+    log_acao('Conta/Pix do cliente cadastrada', 'conta_cliente', cid, f"{pessoa['nome']} - {banco or pix}")
+    flash('Conta/Pix salvo no cadastro do cliente.')
+    return redirect(url_for('painel_cliente', pessoa_id=pessoa_id))
+
+
+@app.route('/contas-cliente/<int:conta_id>/excluir', methods=['POST'])
+def excluir_conta_cliente(conta_id):
+    conta = fetchone("SELECT * FROM contas_cliente WHERE id=?", (conta_id,))
+    if not conta:
+        flash('Conta/Pix não encontrada.'); return redirect(url_for('clientes'))
+    pessoa_id = conta['pessoa_id']
+    con = db(); con.execute("DELETE FROM contas_cliente WHERE id=?", (conta_id,)); con.commit(); con.close()
+    log_acao('Conta/Pix do cliente excluída', 'conta_cliente', conta_id, '')
+    flash('Conta/Pix excluída.')
+    return redirect(url_for('painel_cliente', pessoa_id=pessoa_id))
 
 
 @app.route('/compras', methods=['GET','POST'])
@@ -655,7 +708,7 @@ def editar_compra(compra_id):
         venda_qtd = fnum('venda_quantidade_sacas')
         venda_valor_saca = fnum('venda_valor_saca')
         venda_data = request.form.get('venda_data') or today()
-        venda_status = request.form.get('venda_status_recebimento') or 'Pendente'
+        venda_status = request.form.get('venda_status_recebimento') or 'A pagar ao cliente'
         venda_forma = request.form.get('venda_forma_pagamento') or ''
         venda_obs = request.form.get('venda_observacao') or ''
         venda_msg = ''
@@ -680,8 +733,9 @@ def editar_compra(compra_id):
                          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (pessoa_id, compra_id, venda_data, lote, tipo_cafe, venda_qtd, venda_valor_saca, subtotal, 0, 0, 0, subtotal, custo_saca, lucro, venda_status, venda_forma, venda_obs or 'Venda parcial lançada pela edição da compra'))
             venda_id = cur.lastrowid
+            status_financeiro = 'Pago' if venda_status == 'Pago ao cliente' else 'Pendente'
             cur.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
-                        (venda_data, 'Entrada', f"Venda parcial de café - {lote or compra_id}", 'Venda de café', subtotal, venda_status, f"venda:{venda_id}"))
+                        (venda_data, 'Saída', f"Pagamento de venda parcial ao cliente - {lote or compra_id}", 'Pagamento ao cliente', subtotal, status_financeiro, f"venda:{venda_id}"))
             con.commit(); con.close()
             log_acao('Venda parcial lançada pela compra', 'venda', venda_id, f"Compra #{compra_id} - {br_num(venda_qtd)} sacas - {br_money(subtotal)}")
             restante_row = fetchone(f"SELECT ({lote_estoque_expr()}) estoque FROM compras c WHERE c.id=?", (compra_id,))
@@ -846,8 +900,10 @@ def vendas():
                      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (request.form.get('pessoa_id') or None, compra_id, request.form['data'], lote, tipo_cafe, qtd, valor_saca, subtotal, taxa, meses, juros, total, custo_saca, lucro, request.form.get('status_recebimento'), request.form.get('forma_pagamento'), request.form.get('observacao')))
         venda_id = cur.lastrowid
+        status_venda = request.form.get('status_recebimento') or 'A pagar ao cliente'
+        status_financeiro = 'Pago' if status_venda in ('Recebido','Pago ao cliente') else 'Pendente'
         cur.execute("INSERT INTO financeiro (data,tipo,descricao,categoria,valor,status,origem) VALUES (?,?,?,?,?,?,?)",
-                    (request.form['data'], 'Entrada', f"Venda de café - {lote or venda_id}", 'Venda de café', total, request.form.get('status_recebimento'), f"venda:{venda_id}"))
+                    (request.form['data'], 'Saída', f"Pagamento de venda de café ao cliente - {lote or venda_id}", 'Pagamento ao cliente', total, status_financeiro, f"venda:{venda_id}"))
         con.commit(); con.close(); update_compra_status(compra_id)
         restante_msg = ''
         if compra_id:
@@ -893,7 +949,9 @@ def editar_venda(venda_id):
         con = db(); con.execute("""UPDATE vendas SET pessoa_id=?, compra_id=?, data=?, lote=?, tipo_cafe=?, quantidade_sacas=?, valor_saca=?, subtotal_cafe=?, juros_percentual=?, meses_atraso=?, valor_juros=?, valor_total=?, custo_saca=?, lucro_total=?, status_recebimento=?, forma_pagamento=?, observacao=? WHERE id=?""",
             (request.form.get('pessoa_id') or None, compra_id, request.form['data'], lote, tipo_cafe, qtd, valor_saca, subtotal, taxa, meses, juros, total, custo_saca, lucro, request.form.get('status_recebimento'), request.form.get('forma_pagamento'), request.form.get('observacao'), venda_id))
         con.commit(); con.close()
-        update_financeiro(f"venda:{venda_id}", request.form['data'], 'Entrada', f"Venda de café - {lote or venda_id}", 'Venda de café', total, request.form.get('status_recebimento'))
+        status_venda = request.form.get('status_recebimento') or 'A pagar ao cliente'
+        status_financeiro = 'Pago' if status_venda in ('Recebido','Pago ao cliente') else 'Pendente'
+        update_financeiro(f"venda:{venda_id}", request.form['data'], 'Saída', f"Pagamento de venda de café ao cliente - {lote or venda_id}", 'Pagamento ao cliente', total, status_financeiro)
         update_compra_status(old_compra_id); update_compra_status(compra_id)
         log_acao('Venda editada', 'venda', venda_id, f"Total: {br_money(total)}")
         flash('Venda atualizada. Preço, juros, lucro e estoque recalculados.')
@@ -1016,7 +1074,7 @@ def extrato_cliente(pessoa_id):
     adiantamentos_rows = [adiantamento_com_juros_atual(a) for a in fetchall("SELECT * FROM adiantamentos WHERE pessoa_id=? ORDER BY data DESC, id DESC", (pessoa_id,))]
     estoque_tipo = fetchall(f"""SELECT COALESCE(c.tipo_cafe,'Sem tipo') tipo, SUM({lote_estoque_expr()}) sacas, SUM(({lote_estoque_expr()}) * c.valor_saca) valor
         FROM compras c WHERE c.pessoa_id=? GROUP BY COALESCE(c.tipo_cafe,'Sem tipo') ORDER BY tipo""", (pessoa_id,))
-    saldo_vendas = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento='Pendente'", (pessoa_id,))['v']
+    saldo_vendas = fetchone("SELECT COALESCE(SUM(valor_total),0) v FROM vendas WHERE pessoa_id=? AND status_recebimento IN ('Pendente','A pagar ao cliente')", (pessoa_id,))['v']
     adiantamentos_abertos = [a for a in adiantamentos_rows if adiantamento_em_aberto(a)]
     adiant_sem = sum(float(a.get('valor') or 0) for a in adiantamentos_abertos)
     adiant_juros = sum(float(a.get('valor_juros') or 0) for a in adiantamentos_abertos)
@@ -1045,7 +1103,7 @@ def acertar_tudo_cliente(pessoa_id):
     adiant_ids = [a['id'] for a in dados['adiantamentos']]
     con = db()
     for vid in vendas_ids:
-        con.execute("UPDATE vendas SET status_recebimento='Recebido' WHERE id=?", (vid,))
+        con.execute("UPDATE vendas SET status_recebimento='Pago ao cliente' WHERE id=?", (vid,))
         con.execute("UPDATE financeiro SET status='Pago' WHERE origem=?", (f"venda:{vid}",))
     for aid in adiant_ids:
         con.execute("UPDATE adiantamentos SET status='Pago' WHERE id=?", (aid,))
