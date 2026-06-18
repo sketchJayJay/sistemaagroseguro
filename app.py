@@ -370,7 +370,7 @@ def get_lote_historico(compra_id):
     vendido = float(compra['vendido'] or 0)
     restante = float(compra['estoque_lote'] or 0)
     valor_vendido = float(compra['valor_vendido'] or 0)
-    texto = f"""Café Boa Vista\nHistórico do lote\n\nCliente/fornecedor: {compra['pessoa_nome'] or 'Sem cadastro'}\nLote: {compra['lote'] or ('Lote ' + str(compra['id']))}\nTipo: {compra['tipo_cafe'] or '-'}\nComprado: {br_num(qtd_original)} sacas\nVendido parcialmente: {br_num(vendido)} sacas\nRestante: {br_num(restante)} sacas\nValor vendido: {br_money(valor_vendido)}"""
+    texto = f"""Café Boa Vista\nHistórico de venda parcial do cliente\n\nCliente/fornecedor: {compra['pessoa_nome'] or 'Sem cadastro'}\nLote: {compra['lote'] or ('Lote ' + str(compra['id']))}\nTipo: {compra['tipo_cafe'] or '-'}\nComprado: {br_num(qtd_original)} sacas\nVendido pelo cliente: {br_num(vendido)} sacas\nRestante: {br_num(restante)} sacas\nTotal vendido pelo cliente: {br_money(valor_vendido)}"""
     return dict(compra=compra, vendas=vendas_lote, qtd_original=qtd_original, vendido=vendido,
                 restante=restante, valor_vendido=valor_vendido, texto_whatsapp=texto, hoje=today())
 

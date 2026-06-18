@@ -19,13 +19,13 @@
   <div><label>Status lote</label><select name="status_lote"><option {% if compra.status_lote=='Em estoque' %}selected{% endif %}>Em estoque</option><option {% if compra.status_lote=='Em análise' %}selected{% endif %}>Em análise</option><option {% if compra.status_lote=='Reservado' %}selected{% endif %}>Reservado</option><option {% if compra.status_lote=='Vendido parcial' %}selected{% endif %}>Vendido parcial</option><option {% if compra.status_lote=='Vendido' %}selected{% endif %}>Vendido</option></select></div>
   <div class="span"><label>Observação</label><input name="observacao" value="{{ compra.observacao or '' }}"></div>
 
-  <div class="span section-title">Venda parcial deste lote</div>
-  <div class="span hint">Preencha essa parte quando o cliente vender só uma parte do café. Ao salvar, o sistema lança a venda, baixa as sacas restantes e grava no histórico do lote.</div>
-  <div><label>Data da venda</label><input type="date" name="venda_data" value="{{ hoje }}"></div>
+  <div class="span section-title">Venda parcial do cliente neste lote</div>
+  <div class="span hint">Preencha essa parte quando o cliente vender só uma parte do café. Ao salvar, o sistema registra a venda do cliente, baixa as sacas restantes e grava no histórico do lote.</div>
+  <div><label>Data da venda do cliente</label><input type="date" name="venda_data" value="{{ hoje }}"></div>
   <div><label>Sacas vendidas agora</label><input type="number" step="0.01" name="venda_quantidade_sacas" placeholder="Ex: 5"></div>
-  <div><label>Valor venda/saca</label><input type="number" step="0.01" name="venda_valor_saca" placeholder="Ex: 1250"></div>
-  <div><label>Recebimento</label><select name="venda_status_recebimento"><option>Pendente</option><option>Recebido</option></select></div>
-  <div><label>Forma recebimento</label><input name="venda_forma_pagamento" placeholder="Pix, dinheiro..."></div>
+  <div><label>Valor por saca vendido</label><input type="number" step="0.01" name="venda_valor_saca" placeholder="Ex: 1250"></div>
+  <div><label>Pagamento ao cliente</label><select name="venda_status_recebimento"><option value="Pendente">A pagar ao cliente</option><option value="Recebido">Pago ao cliente</option></select></div>
+  <div><label>Forma de pagamento ao cliente</label><input name="venda_forma_pagamento" placeholder="Pix, dinheiro..."></div>
   <div class="span"><label>Observação da venda parcial</label><input name="venda_observacao" placeholder="Ex: vendeu parte do lote, ficou restante..."></div>
 
   <button class="btn">Salvar alterações</button><a class="btn light" href="{{ url_for('compras') }}">Voltar</a>
@@ -45,11 +45,11 @@
     <p style="margin-top:12px"><a class="btn light" href="{{ url_for('historico_lote', compra_id=compra.id) }}" target="_blank">Ver recibo/histórico completo</a></p>
   </div>
   <div class="card">
-    <h2>Vendas parciais deste lote</h2>
+    <h2>Histórico de vendas parciais do cliente</h2>
     <table>
       <tr><th>Data</th><th>Sacas</th><th>Valor/saca</th><th>Total</th><th>Status</th></tr>
       {% for v in historico.vendas %}
-      <tr><td>{{ v.data }}</td><td>{{ v.quantidade_sacas|num }}</td><td>{{ v.valor_saca|money }}</td><td>{{ v.valor_total|money }}</td><td>{{ v.status_recebimento }}</td></tr>
+      <tr><td>{{ v.data }}</td><td>{{ v.quantidade_sacas|num }}</td><td>{{ v.valor_saca|money }}</td><td>{{ v.valor_total|money }}</td><td>{% if v.status_recebimento=='Recebido' %}Pago ao cliente{% else %}A pagar ao cliente{% endif %}</td></tr>
       {% else %}
       <tr><td colspan="5">Nenhuma venda parcial lançada ainda.</td></tr>
       {% endfor %}

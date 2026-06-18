@@ -11,7 +11,7 @@
     <div class="receipt-head">
       <img src="{{ url_for('static', filename='logo_boavista.jpg') }}" alt="Logo Café Boa Vista">
       <div>
-        <h1>HISTÓRICO DE VENDA PARCIAL DO LOTE</h1>
+        <h1>HISTÓRICO DE VENDA PARCIAL DO CLIENTE</h1>
         <p class="receipt-company"><b>Café Boa Vista</b> • Comprador: Sebastião Lopes Filho</p>
         <p class="receipt-company">Telefones: (33) 99970-7857 / (33) 98459-1051</p>
         <p class="receipt-company">Grumarinho - próximo Neblina, Divino - MG</p>
@@ -22,7 +22,7 @@
       <div class="metric"><small>Comprado</small><strong>{{ qtd_original|num }} sacas</strong></div>
       <div class="metric"><small>Já vendido</small><strong>{{ vendido|num }} sacas</strong></div>
       <div class="metric good"><small>Restante</small><strong>{{ restante|num }} sacas</strong></div>
-      <div class="metric"><small>Valor vendido</small><strong>{{ valor_vendido|money }}</strong></div>
+      <div class="metric"><small>Total vendido pelo cliente</small><strong>{{ valor_vendido|money }}</strong></div>
     </div>
 
     <p><b>Cliente/fornecedor:</b> {{ compra.pessoa_nome or 'Sem cadastro' }}</p>
@@ -34,10 +34,10 @@
     <p><b>Status atual:</b> {% if restante<=0 %}Vendido total{% elif vendido>0 %}Vendido parcial{% else %}Em estoque{% endif %}</p>
 
     <hr>
-    <h2>Vendas parciais desse lote</h2>
+    <h2>Vendas parciais do cliente neste lote</h2>
     {% if vendas %}
       <table>
-        <tr><th>Data</th><th>Cliente</th><th>Sacas vendidas</th><th>Valor/saca</th><th>Juros</th><th>Total venda</th><th>Status</th><th>Obs.</th></tr>
+        <tr><th>Data</th><th>Cliente</th><th>Sacas vendidas</th><th>Valor/saca</th><th>Juros</th><th>Total venda</th><th>Pagamento ao cliente</th><th>Obs.</th></tr>
         {% for v in vendas %}
         <tr>
           <td>{{ v.data }}</td>
@@ -46,17 +46,17 @@
           <td>{{ v.valor_saca|money }}</td>
           <td>{{ v.valor_juros|money }}</td>
           <td><b>{{ v.valor_total|money }}</b></td>
-          <td>{{ v.status_recebimento or '-' }}</td>
+          <td>{% if v.status_recebimento=='Recebido' %}Pago ao cliente{% else %}A pagar ao cliente{% endif %}</td>
           <td>{{ v.observacao or '-' }}</td>
         </tr>
         {% endfor %}
       </table>
     {% else %}
-      <p>Nenhuma venda parcial lançada neste lote ainda.</p>
+      <p>Nenhuma venda parcial do cliente lançada neste lote ainda.</p>
     {% endif %}
 
     <hr>
-    <p><b>Resumo final:</b> de {{ qtd_original|num }} sacas compradas, já foram vendidas {{ vendido|num }} sacas e restam {{ restante|num }} sacas.</p>
+    <p><b>Resumo final:</b> de {{ qtd_original|num }} sacas registradas no lote, o cliente já vendeu {{ vendido|num }} sacas e ainda restam {{ restante|num }} sacas.</p>
     <p class="receipt-slogan">Servir bem e honestidade é nossa missão</p>
     <div class="actions no-print"><button onclick="window.print()" class="btn">Imprimir / salvar PDF</button><a class="btn light" href="{{ whatsapp_link(texto_whatsapp) }}" target="_blank">Enviar WhatsApp</a></div>
   </div>
