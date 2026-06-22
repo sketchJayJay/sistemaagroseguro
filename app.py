@@ -451,10 +451,22 @@ def index():
     pagar = fetchone("SELECT COALESCE(SUM(valor),0) v FROM financeiro WHERE tipo='Saída' AND status='Pendente'")['v']
     lucro = fetchone("SELECT COALESCE(SUM(lucro_total),0) v FROM vendas")['v']
     valor_estoque = fetchone(f"SELECT COALESCE(SUM(({lote_estoque_expr()}) * c.valor_saca),0) v FROM compras c")['v']
+
+    # Painel geral separado em operação do café e financeiro.
+    # Evita confundir o cliente com saldo negativo misturando depósito, compra e pagamento ao produtor.
+    adiantamentos_abertos_rows = fetchall("SELECT * FROM adiantamentos WHERE COALESCE(status,'Aberto') NOT IN ('Pago','pago','Quitado','quitado')")
+    adiantamentos_atualizados = [adiantamento_com_juros_atual(a) for a in adiantamentos_abertos_rows]
+    valores_clientes_pegaram = sum(float(a.get('valor') or 0) for a in adiantamentos_atualizados)
+    juros_clientes_pegaram = sum(float(a.get('valor_juros') or 0) for a in adiantamentos_atualizados)
+    total_clientes_pegaram = sum(float(a.get('valor_total') or 0) for a in adiantamentos_atualizados)
+    resultado_caixa = entrada - saida
+
     ultimas_compras = fetchall("""SELECT compras.*, pessoas.nome pessoa_nome FROM compras LEFT JOIN pessoas ON pessoas.id = compras.pessoa_id ORDER BY compras.id DESC LIMIT 6""")
     ultimas_vendas = fetchall("""SELECT vendas.*, pessoas.nome pessoa_nome FROM vendas LEFT JOIN pessoas ON pessoas.id = vendas.pessoa_id ORDER BY vendas.id DESC LIMIT 6""")
     return render_template('index.html', total_compras=total_compras, total_vendas=total_vendas, estoque=sacas_compradas-sacas_vendidas,
-                           saldo=entrada-saida, receber=receber, pagar=pagar, lucro=lucro, valor_estoque=valor_estoque,
+                           resultado_caixa=resultado_caixa, receber=receber, pagar=pagar, lucro=lucro, valor_estoque=valor_estoque,
+                           valores_clientes_pegaram=valores_clientes_pegaram, juros_clientes_pegaram=juros_clientes_pegaram,
+                           total_clientes_pegaram=total_clientes_pegaram,
                            ultimas_compras=ultimas_compras, ultimas_vendas=ultimas_vendas)
 
 
