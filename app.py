@@ -459,6 +459,13 @@ def index():
     valores_clientes_pegaram = sum(float(a.get('valor') or 0) for a in adiantamentos_atualizados)
     juros_clientes_pegaram = sum(float(a.get('valor_juros') or 0) for a in adiantamentos_atualizados)
     total_clientes_pegaram = sum(float(a.get('valor_total') or 0) for a in adiantamentos_atualizados)
+
+    # Valor líquido para pagar aos clientes/produtores no modelo de café em depósito.
+    # O cliente vende o café dele; depois desconta o que ele já pegou + juros desses valores.
+    bruto_vendido_clientes = float(total_vendas or 0)
+    liquido_a_pagar_clientes = bruto_vendido_clientes - float(total_clientes_pegaram or 0)
+    if liquido_a_pagar_clientes < 0:
+        liquido_a_pagar_clientes = 0
     resultado_caixa = entrada - saida
 
     ultimas_compras = fetchall("""SELECT compras.*, pessoas.nome pessoa_nome FROM compras LEFT JOIN pessoas ON pessoas.id = compras.pessoa_id ORDER BY compras.id DESC LIMIT 6""")
@@ -466,7 +473,8 @@ def index():
     return render_template('index.html', total_compras=total_compras, total_vendas=total_vendas, estoque=sacas_compradas-sacas_vendidas,
                            resultado_caixa=resultado_caixa, receber=receber, pagar=pagar, lucro=lucro, valor_estoque=valor_estoque,
                            valores_clientes_pegaram=valores_clientes_pegaram, juros_clientes_pegaram=juros_clientes_pegaram,
-                           total_clientes_pegaram=total_clientes_pegaram,
+                           total_clientes_pegaram=total_clientes_pegaram, bruto_vendido_clientes=bruto_vendido_clientes,
+                           liquido_a_pagar_clientes=liquido_a_pagar_clientes,
                            ultimas_compras=ultimas_compras, ultimas_vendas=ultimas_vendas)
 
 

@@ -4,11 +4,11 @@
   <div>
     <span class="eyebrow">CAFÉ BOA VISTA</span>
     <h1>Painel geral</h1>
-    <p class="subtitle">Resumo do café em depósito dos clientes, vendas parciais, pagamentos e financeiro sem misturar as contas.</p>
+    <p class="subtitle">Resumo do café em depósito dos clientes, vendas parciais, valor líquido a pagar e lucro da Café Boa Vista separados.</p>
   </div>
   <div class="hero-note">
     <strong>Sebastião Lopes Filho</strong>
-    <p>Gestão prática para acompanhar compras, provas, vendas, pagamentos ao cliente e resultados do café.</p>
+    <p>Gestão prática para acompanhar café em depósito, vendas dos clientes, valores pegos, juros e lucro da empresa.</p>
   </div>
 </div>
 
@@ -18,16 +18,17 @@
   <div class="card metric"><small>Valor estimado em depósito</small><strong>{{ valor_estoque|money }}</strong></div>
   <div class="card metric"><small>Total depositado/comprado</small><strong>{{ total_compras|money }}</strong></div>
   <div class="card metric"><small>Total vendido pelos clientes</small><strong>{{ total_vendas|money }}</strong></div>
-  <div class="card metric good"><small>Lucro realizado</small><strong>{{ lucro|money }}</strong></div>
+  <div class="card metric good"><small>Lucro da Café Boa Vista</small><strong>{{ lucro|money }}</strong></div>
 </div>
 
 <div class="section-title" style="margin-top:18px"><h2>Financeiro</h2></div>
 <div class="grid metrics">
-  <div class="card metric warn"><small>A pagar para clientes</small><strong>{{ pagar|money }}</strong></div>
-  <div class="card metric warn"><small>A receber</small><strong>{{ receber|money }}</strong></div>
+  <div class="card metric"><small>Vendido dos clientes</small><strong>{{ bruto_vendido_clientes|money }}</strong></div>
   <div class="card metric"><small>Valores que clientes pegaram</small><strong>{{ valores_clientes_pegaram|money }}</strong></div>
-  <div class="card metric warn"><small>Juros acumulados</small><strong>{{ juros_clientes_pegaram|money }}</strong></div>
-  <div class="card metric"><small>Total valores pegos + juros</small><strong>{{ total_clientes_pegaram|money }}</strong></div>
+  <div class="card metric warn"><small>Juros dos valores pegos</small><strong>{{ juros_clientes_pegaram|money }}</strong></div>
+  <div class="card metric warn"><small>Total a descontar do cliente</small><strong>{{ total_clientes_pegaram|money }}</strong><small>Valores pegos + juros</small></div>
+  <div class="card metric good"><small>Líquido a pagar aos clientes</small><strong>{{ liquido_a_pagar_clientes|money }}</strong><small>Vendido menos valores pegos e juros</small></div>
+  <div class="card metric warn"><small>A receber</small><strong>{{ receber|money }}</strong></div>
   <div class="card metric"><small>Resultado do caixa registrado</small><strong>{{ resultado_caixa|money }}</strong><small>Só considera lançamentos financeiros já registrados</small></div>
 </div>
 
