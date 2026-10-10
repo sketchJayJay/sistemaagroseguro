@@ -1,53 +1,14 @@
-{% extends 'base.html' %}
-{% block content %}
-<div class="hero card">
-  <div>
-    <span class="eyebrow">CAFÉ BOA VISTA</span>
-    <h1>Painel geral</h1>
-    <p class="subtitle">Resumo do café em depósito dos clientes, vendas parciais, valor líquido a pagar e lucro da Café Boa Vista separados.</p>
-  </div>
-  <div class="hero-note">
-    <strong>Sebastião Lopes Filho</strong>
-    <p>Gestão prática para acompanhar café em depósito, vendas dos clientes, valores pegos, juros e lucro da empresa.</p>
-  </div>
+{% extends 'base.html' %}{% from 'ui.html' import icon, stat %}{% block content %}
+<div class="page-heading"><div><span class="eyebrow">SEU CAFÉ. SUA GESTÃO.</span><h1>Visão geral</h1><p class="subtitle">Acompanhe sua operação e cuide do próximo negócio.</p></div><a class="btn light" href="{{ url_for('relatorios') }}">{{ icon('chart') }} Ver relatórios</a></div>
+<section class="dashboard-hero"><div><span class="hero-kicker"><span class="online-dot"></span> CAFÉ BOA VISTA</span><h2>Do primeiro grão<br>ao melhor negócio.</h2><p>Provas, estoque e acertos conectados.<br>Mais clareza para decidir, mais tempo para negociar.</p><div class="hero-actions"><a class="btn" href="{{ url_for('compras',novo=1) }}#novo">{{ icon('plus') }} Nova compra</a><a class="hero-link" href="{{ url_for('provas') }}#formProva">Nova prova {{ icon('arrow-up') }}</a></div></div><div class="hero-art" aria-hidden="true"><svg viewBox="0 0 320 230" fill="none"><circle cx="210" cy="114" r="103" stroke="currentColor" opacity=".12"/><circle cx="210" cy="114" r="78" stroke="currentColor" opacity=".2"/><path d="M141 181C100 118 131 46 217 45c59 0 83 37 39 88-38 45-97 65-115 48z" stroke="currentColor" stroke-width="2" opacity=".5"/><path d="M161 181c-16-45 51-52 39-91-5-17 8-30 24-44" stroke="currentColor" stroke-width="3" opacity=".7"/><path d="M256 73c29-18 40-50 31-66-31 3-63 31-59 52m-36 136c17 20 41 26 58 14-7-29-22-39-40-42" stroke="currentColor" stroke-width="2" opacity=".35"/><circle cx="89" cy="124" r="4" fill="currentColor" opacity=".45"/><circle cx="277" cy="165" r="5" fill="currentColor" opacity=".45"/></svg><div class="hero-caption"><span>ORIGEM & QUALIDADE</span><b>Uma boa gestão faz<br>toda a diferença.</b></div></div></section>
+<div class="grid dashboard-stats">
+{{ stat('Café em estoque', (estoque|num) ~ ' sc', 'box', url_for('lotes'), qtd_lotes|string ~ ' lotes disponíveis') }}
+{{ stat('Vendas neste mês', vendas_mes|money, 'arrow-up', url_for('vendas',desde=data_atual[:7] ~ '-01',ate=fim_mes), ('%+.1f'|format(variacao) ~ '% em relação ao mês anterior') if variacao is not none else 'Vendas registradas no mês', 'green') }}
+{{ stat('Líquido a pagar', liquido_a_pagar_clientes|money, 'wallet', url_for('clientes'), 'Vendas em aberto − adiantamentos e juros', 'amber') }}
+{{ stat('Lucro do café', lucro|money, 'chart', url_for('relatorios'), 'Preço de venda − custo do lote', 'green') }}
 </div>
-
-<div class="section-title"><h2>Operação do café</h2></div>
-<div class="grid metrics">
-  <div class="card metric"><small>Sacas em depósito dos clientes</small><strong>{{ estoque|num }} sacas</strong></div>
-  <div class="card metric"><small>Valor estimado em depósito</small><strong>{{ valor_estoque|money }}</strong></div>
-  <div class="card metric"><small>Total depositado/comprado</small><strong>{{ total_compras|money }}</strong></div>
-  <div class="card metric"><small>Total vendido pelos clientes</small><strong>{{ total_vendas|money }}</strong></div>
-  <div class="card metric good"><small>Lucro da Café Boa Vista</small><strong>{{ lucro|money }}</strong></div>
-</div>
-
-<div class="section-title" style="margin-top:18px"><h2>Financeiro</h2></div>
-<div class="grid metrics">
-  <div class="card metric"><small>Vendido dos clientes</small><strong>{{ bruto_vendido_clientes|money }}</strong></div>
-  <div class="card metric"><small>Valores que clientes pegaram</small><strong>{{ valores_clientes_pegaram|money }}</strong></div>
-  <div class="card metric warn"><small>Juros dos valores pegos</small><strong>{{ juros_clientes_pegaram|money }}</strong></div>
-  <div class="card metric warn"><small>Total a descontar do cliente</small><strong>{{ total_clientes_pegaram|money }}</strong><small>Valores pegos + juros</small></div>
-  <div class="card metric good"><small>Líquido a pagar aos clientes</small><strong>{{ liquido_a_pagar_clientes|money }}</strong><small>Vendido menos valores pegos e juros</small></div>
-  <div class="card metric warn"><small>A receber</small><strong>{{ receber|money }}</strong></div>
-  <div class="card metric"><small>Resultado do caixa registrado</small><strong>{{ resultado_caixa|money }}</strong><small>Só considera lançamentos financeiros já registrados</small></div>
-</div>
-
-<div class="quick">
-  <a class="btn" href="{{ url_for('compras') }}">+ Nova compra</a>
-  <a class="btn" href="{{ url_for('provas') }}">+ Nova prova</a>
-  <a class="btn" href="{{ url_for('vendas') }}">+ Nova venda</a>
-  <a class="btn light" href="{{ url_for('simulador') }}">Simular negociação</a>
-  <a class="btn light" href="{{ url_for('clientes') }}">Painel clientes</a>
-</div>
-
-<div class="row">
-  <div class="card">
-    <div class="section-title"><h2>Últimas compras</h2><a href="{{ url_for('compras') }}">ver todas</a></div>
-    <table><tr><th>Data</th><th>Fornecedor</th><th>Lote</th><th>Total</th></tr>{% for c in ultimas_compras %}<tr><td>{{ c.data }}</td><td>{{ c.pessoa_nome or '-' }}</td><td>{{ c.lote or '-' }}</td><td>{{ c.valor_total|money }}</td></tr>{% endfor %}</table>
-  </div>
-  <div class="card">
-    <div class="section-title"><h2>Últimas vendas</h2><a href="{{ url_for('vendas') }}">ver todas</a></div>
-    <table><tr><th>Data</th><th>Cliente</th><th>Lote</th><th>Lucro</th></tr>{% for v in ultimas_vendas %}<tr><td>{{ v.data }}</td><td>{{ v.pessoa_nome or '-' }}</td><td>{{ v.lote or '-' }}</td><td>{{ v.lucro_total|money }}</td></tr>{% endfor %}</table>
-  </div>
-</div>
+<div class="dashboard-charts"><section class="card chart-card"><div class="section-title"><div><span class="eyebrow">MOVIMENTAÇÃO</span><h2>Vendas de café</h2></div><span class="muted small-text">Últimos 6 meses</span></div><div class="chart-total"><strong>{{ total_vendas|money }}</strong><span>Total vendido · todos os períodos</span></div><div class="sales-chart" data-chart='{{ serie_vendas|tojson }}' aria-label="Gráfico das vendas registradas nos últimos seis meses"></div><details class="chart-data"><summary>Ver valores do gráfico</summary><table class="compact-table"><thead><tr><th>Mês</th><th>Total vendido</th></tr></thead><tbody>{% for m in serie_vendas %}<tr><td>{{ m.periodo }}</td><td>{{ m.valor|money }}</td></tr>{% endfor %}</tbody></table></details></section>
+<section class="card stock-card"><div class="section-title"><div><span class="eyebrow">SEU DEPÓSITO</span><h2>Estoque por tipo</h2></div><span class="stat-icon">{{ icon('box') }}</span></div><div class="stock-total"><strong>{{ estoque|num }}<small> sacas</small></strong><span>{{ valor_estoque|money }} em referência</span></div><div class="stock-bars">{% for e in estoque_tipo %}<div class="stock-item"><div><span><i class="legend-dot color-{{ loop.index0 % 6 }}"></i>{{ e.tipo }}</span><b>{{ e.sacas|num }} sc</b></div><div class="progress-track"><span class="color-{{ loop.index0 % 6 }}" style="width:{{ (e.sacas/estoque*100)|round(1) if estoque else 0 }}%"></span></div></div>{% else %}<div class="empty-state">{{ icon('box') }}<b>Seu depósito começa aqui</b><p>Cadastre uma compra para acompanhar o saldo de cada lote.</p><a class="mini" href="{{ url_for('compras',novo=1) }}#novo">Cadastrar compra</a></div>{% endfor %}</div><a class="stock-link" href="{{ url_for('lotes') }}">Ver todo o estoque {{ icon('chevron') }}</a></section></div>
+<div class="section-title dashboard-section"><div><h2>Próximos passos</h2><p class="hint">O que merece atenção na sua operação.</p></div></div><div class="attention-grid"><a class="attention-card" href="{{ url_for('cafes_analise') }}"><span class="attention-icon">{{ icon('cup') }}</span><div><b>{{ provas_analise }} provas em análise</b><small>Acompanhar resultados</small></div>{{ icon('chevron') }}</a><a class="attention-card" href="{{ url_for('clientes') }}"><span class="attention-icon amber">{{ icon('people') }}</span><div><b>{{ qtd_clientes }} clientes e produtores</b><small>{{ saldo_recuperar|money }} a recuperar em acertos</small></div>{{ icon('chevron') }}</a><a class="attention-card" href="{{ url_for('financeiro',status='Pendente') }}"><span class="attention-icon">{{ icon('wallet') }}</span><div><b>{{ pagar|money }} a pagar</b><small>{{ receber|money }} a receber · lançamentos pendentes</small></div>{{ icon('chevron') }}</a></div>
+<div class="row recent-row"><section class="card"><div class="section-title"><h2>Últimas compras</h2><a href="{{ url_for('compras') }}">Ver todas {{ icon('chevron') }}</a></div><table class="compact-table"><thead><tr><th>Cliente / lote</th><th>Data</th><th class="align-right">Total</th></tr></thead><tbody>{% for c in ultimas_compras %}<tr><td><a class="table-name" href="{{ url_for('editar_compra',compra_id=c.id) }}">{{ c.pessoa_nome or 'Sem cadastro' }}</a><small class="cell-sub">{{ c.lote or 'Lote ' ~ c.id }} · {{ c.tipo_cafe or 'Sem tipo' }}</small></td><td>{{ c.data|brdate }}</td><td class="align-right number">{{ c.valor_total|money }}</td></tr>{% else %}<tr><td colspan="3" class="empty-cell">Nenhuma compra registrada ainda.</td></tr>{% endfor %}</tbody></table></section><section class="card"><div class="section-title"><h2>Últimas vendas</h2><a href="{{ url_for('vendas') }}">Ver todas {{ icon('chevron') }}</a></div><table class="compact-table"><thead><tr><th>Cliente / lote</th><th>Sacas</th><th class="align-right">Total</th></tr></thead><tbody>{% for v in ultimas_vendas %}<tr><td><a class="table-name" href="{{ url_for('editar_venda',venda_id=v.id) }}">{{ v.pessoa_nome or 'Sem cadastro' }}</a><small class="cell-sub">{{ v.lote or 'Venda avulsa' }} · {{ v.data|brdate }}</small></td><td class="number">{{ v.quantidade_sacas|num }}</td><td class="align-right number">{{ v.valor_total|money }}</td></tr>{% else %}<tr><td colspan="3" class="empty-cell">Nenhuma venda registrada ainda.</td></tr>{% endfor %}</tbody></table></section></div>
 {% endblock %}

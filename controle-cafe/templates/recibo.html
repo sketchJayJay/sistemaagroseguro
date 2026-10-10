@@ -18,7 +18,7 @@
       </div>
     </div>
     {% if item %}
-      <p><b>Data:</b> {{ item.data }}</p>
+      <p><b>Data:</b> {{ item.data|brdate }}</p>
       <p><b>{{ 'Fornecedor' if tipo=='compra' else 'Cliente' }}:</b> {{ item.pessoa_nome or 'Sem cadastro' }}</p>
       <p><b>CPF/CNPJ:</b> {{ item.documento or '-' }}</p>
       <p><b>Telefone:</b> {{ item.telefone or '-' }}</p>

@@ -1,37 +1,5 @@
-{% extends 'base.html' %}{% block content %}
-<div class="hero card">
-  <div>
-    <span class="eyebrow">PAINÉIS DOS CLIENTES</span>
-    <h1>Clientes e produtores</h1>
-    <p class="subtitle">Abra o painel de cada cliente/produtor para ver vendas, estoque, provas, saldo e juros.</p>
-  </div>
-  <div class="hero-note">
-    <strong>Atalho rápido</strong>
-    <p>Use a busca para achar o cliente pelo nome, telefone, cidade ou fazenda.</p>
-  </div>
-</div>
-
-<div class="card">
-  <form class="search" method="get">
-    <input name="q" placeholder="Buscar cliente, telefone, cidade ou fazenda" value="{{ q }}">
-    <button class="btn light">Buscar</button>
-    <a class="btn" href="{{ url_for('pessoas') }}">+ Novo cliente</a>
-  </form>
-
-  <div class="client-grid">
-    {% for c in clientes %}
-      <div class="client-card">
-        <h2>{{ c.nome }}</h2>
-        <p>{{ c.whatsapp or c.telefone or 'Sem telefone' }}</p>
-        <p>{{ c.fazenda or c.cidade or '-' }}</p>
-        <div class="actions">
-          <a class="btn" href="{{ url_for('painel_cliente', pessoa_id=c.id) }}">Abrir painel</a>
-          <a class="mini" href="{{ url_for('editar_pessoa', pessoa_id=c.id) }}">Editar</a>
-        </div>
-      </div>
-    {% else %}
-      <p class="subtitle">Nenhum cliente encontrado.</p>
-    {% endfor %}
-  </div>
-</div>
+{% extends 'base.html' %}{% from 'ui.html' import icon %}{% block content %}
+<div class="page-heading"><div><span class="eyebrow">QUEM FAZ O SEU NEGÓCIO</span><h1>Clientes e produtores</h1><p class="subtitle">Estoque, provas e acertos de cada cliente em um só painel.</p></div><a class="btn" href="{{ url_for('pessoas') }}#novo">{{ icon('plus') }} Novo cadastro</a></div>
+<div class="card search-card"><form class="search" method="get"><input type="search" name="q" placeholder="Buscar nome, telefone, cidade ou fazenda" value="{{ q }}" aria-label="Buscar clientes"><button class="btn light">{{ icon('search') }} Buscar</button>{% if q %}<a class="mini" href="{{ url_for('clientes') }}">Limpar</a>{% endif %}</form></div>
+<div class="client-grid">{% for c in clientes %}<article class="client-card"><div class="client-card-top"><span class="client-avatar">{{ c.nome[:2]|upper }}</span><div><h2>{{ c.nome }}</h2><span class="badge">{{ c.tipo }}</span></div></div><p>{{ c.whatsapp or c.telefone or 'Telefone não informado' }}</p><p>{{ c.fazenda or c.cidade or 'Local não informado' }}</p><div class="actions"><a class="btn" href="{{ url_for('painel_cliente',pessoa_id=c.id) }}">Abrir painel {{ icon('chevron') }}</a><a class="mini" href="{{ url_for('editar_pessoa',pessoa_id=c.id) }}">Editar</a></div></article>{% else %}<div class="card span-full"><div class="empty-state">{{ icon('people') }}<b>{{ 'Nenhum cliente encontrado' if q else 'Seu relacionamento começa aqui' }}</b><p>{{ 'Ajuste a busca para encontrar o cadastro.' if q else 'Cadastre clientes e produtores para acompanhar o café e os acertos.' }}</p><a class="btn light" href="{{ url_for('pessoas') }}#novo">Novo cadastro</a></div></div>{% endfor %}</div>
 {% endblock %}

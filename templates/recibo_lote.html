@@ -40,7 +40,7 @@
         <tr><th>Data</th><th>Cliente</th><th>Sacas vendidas</th><th>Valor/saca</th><th>Juros</th><th>Total venda</th><th>Pagamento ao cliente</th><th>Obs.</th><th class="no-print">Ações</th></tr>
         {% for v in vendas %}
         <tr>
-          <td>{{ v.data }}</td>
+          <td>{{ v.data|brdate }}</td>
           <td>{{ v.pessoa_nome or compra.pessoa_nome or '-' }}</td>
           <td>{{ v.quantidade_sacas|num }}</td>
           <td>{{ v.valor_saca|money }}</td>

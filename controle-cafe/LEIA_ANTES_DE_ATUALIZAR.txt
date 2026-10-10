@@ -1,0 +1,23 @@
+CAFÉ BOA VISTA — VERSÃO 2.0
+
+O código está pronto para atualizar a instalação existente.
+
+1. Baixe o backup no sistema atual.
+2. Substitua o código pelo conteúdo deste pacote.
+3. Mantenha o volume existente em /app/data. Não apague esse volume nem substitua o banco de produção pelos arquivos de exemplo do pacote.
+4. Faça o redeploy no Coolify com Dockerfile e porta interna 8080.
+5. Recarregue a página.
+
+NOVO VISUAL
+Menu verde escuro, painel com gráficos, estoque por tipo, prévia de valores, filtros e painel do cliente com abas.
+
+CORREÇÕES PRINCIPAIS
+- Provas aprovadas permanecem aprovadas.
+- Vendas parciais e simultâneas não deixam estoque negativo.
+- Financeiro separa valores confirmados de pendências e permite dar baixa.
+- Acerto desconta adiantamentos e juros e lança somente o valor líquido no caixa.
+- Backup inválido não substitui os dados atuais.
+
+O histórico financeiro antigo não foi reescrito. As correções do acerto se aplicam às próximas confirmações.
+
+No README.md há uma descrição completa das melhorias, configuração e testes.

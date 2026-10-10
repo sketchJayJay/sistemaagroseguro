@@ -1,73 +1,20 @@
-<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Café Boa Vista • Sistema de Gestão</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <aside class="side">
-    <div class="brand-card">
-      <img class="brand-logo" src="{{ url_for('static', filename='logo_boavista.jpg') }}" alt="Logo Café Boa Vista">
-      <div class="brand-text">
-        <b>Café Boa Vista</b>
-        <span>Sistema de compra • prova • venda</span>
-      </div>
-    </div>
-
-    <div class="contact-box">
-      <small>Comprador</small>
-      <strong>Sebastião Lopes Filho</strong>
-      <span>📞 (33) 99970-7857</span>
-      <span>📞 (33) 98459-1051</span>
-      <span>📍 Grumarinho - próximo Neblina, Divino - MG</span>
-    </div>
-
-    <nav>
-      <a href="{{ url_for('index') }}">Painel</a>
-      <a href="{{ url_for('pessoas') }}">Pessoas</a><a href="{{ url_for('clientes') }}">Painel Clientes/Produtores</a>
-      <a href="{{ url_for('compras') }}">Compras</a>
-      <a href="{{ url_for('provas') }}">Provas</a>
-      <a href="{{ url_for('vendas') }}">Vendas</a>
-      <a href="{{ url_for('lotes') }}">Lotes/Estoque</a>
-      <a href="{{ url_for('financeiro') }}">Financeiro</a>
-      <a href="{{ url_for('simulador') }}">Simulador</a>
-      <a href="{{ url_for('relatorios') }}">Relatórios</a>
-      <a href="{{ url_for('busca_geral') }}">Busca geral</a>
-      <a href="{{ url_for('backup') }}">Backup</a>
-    </nav>
-
-    <div class="brand-footer">
-      <em>“Servir bem e honestidade é nossa missão”</em>
-    </div>
-  </aside>
-
-  <main>
-    {% with msgs=get_flashed_messages() %}
-      {% if msgs %}<div class="flash">{{ msgs[0] }}</div>{% endif %}
-    {% endwith %}
-    {% block content %}{% endblock %}
-  </main>
-
-<script>
-document.addEventListener('input', function(e){
-  if(e.target.classList.contains('select-search')){
-    const sel=document.getElementById(e.target.dataset.target); if(!sel) return;
-    const q=e.target.value.toLowerCase();
-    [...sel.options].forEach((op,i)=>{op.hidden = i>0 && !op.text.toLowerCase().includes(q);});
-  }
-  if(e.target.closest('.calc-sacas')){
-    const form=e.target.closest('.calc-sacas');
-    const peso=parseFloat((form.querySelector('.peso')?.value||'0').replace(',','.'))||0;
-    const divisor=parseFloat((form.querySelector('.divisor')?.value||'60').replace(',','.'))||60;
-    const ajuste=parseFloat((form.querySelector('.ajuste')?.value||'0').replace(',','.'))||0;
-    const sacas=form.querySelector('.sacas');
-    if(sacas && (e.target.classList.contains('peso') || e.target.classList.contains('divisor') || e.target.classList.contains('ajuste'))){
-      sacas.value=((peso/divisor)+ajuste).toFixed(2);
-    }
-  }
-});
-</script>
-</body>
-</html>
+{% from 'ui.html' import icon %}
+<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#123c32"><title>{{ page_title }} · Café Boa Vista</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static',filename='favicon.svg') }}"><link rel="stylesheet" href="{{ url_for('static',filename='style.css',v=app_version) }}"><script defer src="{{ url_for('static',filename='app.js',v=app_version) }}"></script>
+</head><body>
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a><button class="sidebar-overlay" type="button" aria-label="Fechar menu" tabindex="-1"></button>
+<aside class="side" id="menu-lateral" aria-label="Menu principal">
+<a class="brand" href="{{ url_for('index') }}"><span class="brand-mark">{{ icon('leaf') }}</span><span><b>Café Boa Vista</b><small>GESTÃO DO CAFÉ</small></span></a><button class="sidebar-close icon-button" type="button" aria-label="Fechar menu">{{ icon('close') }}</button>
+<div class="workspace-label"><span class="online-dot"></span> Sua operação, em um só lugar</div>
+<nav class="main-nav">
+{% set groups=[('PRINCIPAL',[('index','Visão geral','grid'),('clientes','Clientes e produtores','people')]),('OPERAÇÃO',[('compras','Compras','bag'),('provas','Provas de café','cup'),('vendas','Vendas','arrow-up'),('lotes','Estoque','box')]),('GESTÃO',[('financeiro','Financeiro','wallet'),('relatorios','Relatórios','chart'),('simulador','Simulador','calculator')]),('FERRAMENTAS',[('pessoas','Cadastros','people'),('busca_geral','Busca geral','search'),('backup','Backup','shield'),('historico','Histórico','clock')])] %}
+{% set aliases={'painel_cliente':'clientes','editar_compra':'compras','editar_venda':'vendas','editar_prova':'provas','editar_pessoa':'pessoas','editar_financeiro':'financeiro','cafes_analise':'provas'} %}{% set active=aliases.get(request.endpoint,request.endpoint) %}
+{% for group,items in groups %}<div class="nav-group"><span class="nav-label">{{ group }}</span>{% for ep,label,symbol in items %}<a class="nav-link {% if active==ep %}active{% endif %}" href="{{ url_for(ep) }}" {% if active==ep %}aria-current="page"{% endif %}>{{ icon(symbol) }}<span>{{ label }}</span>{% if active==ep %}<i class="active-dot"></i>{% endif %}</a>{% endfor %}</div>{% endfor %}
+</nav>
+<details class="company-details"><summary>{{ icon('leaf') }} Sobre a empresa</summary><img src="{{ url_for('static',filename='logo_boavista.jpg') }}" alt="Café Boa Vista, Sebastião Lopes Filho"><strong>Sebastião Lopes Filho</strong><a href="tel:+5533999707857">(33) 99970-7857</a><a href="tel:+5533984591051">(33) 98459-1051</a><small>Grumarinho · Divino, MG</small></details>
+<div class="side-footer"><span class="avatar">SL</span><span><b>Sebastião Lopes Filho</b><small>Café Boa Vista</small></span></div>
+</aside>
+<div class="app-shell"><header class="topbar"><div class="topbar-left"><button id="abrir-menu" type="button" class="icon-button menu-button" aria-controls="menu-lateral" aria-expanded="false" aria-label="Abrir menu">{{ icon('menu') }}</button>{% if request.endpoint!='index' %}<a class="icon-button back-button" href="{{ url_for('clientes') if request.endpoint=='painel_cliente' else url_for('index') }}" data-back aria-label="Voltar">{{ icon('back') }}</a>{% endif %}<span class="breadcrumb">Café Boa Vista <span>/</span> <b>{{ page_title }}</b></span></div><div class="topbar-right"><form action="{{ url_for('busca_geral') }}" method="get" class="global-search">{{ icon('search') }}<input type="search" name="q" aria-label="Buscar no sistema" placeholder="Buscar no sistema..."></form><span class="date-pill">{{ icon('calendar') }}{{ data_atual|brdate }}</span><span class="avatar small">SL</span></div></header>
+<main id="conteudo" tabindex="-1">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash {{ category }}" role="status"><span>{{ message }}</span><button type="button" class="icon-button" data-dismiss aria-label="Fechar aviso">{{ icon('close') }}</button></div>{% endfor %}{% endwith %}{% block content %}{% endblock %}<footer class="page-footer"><span>Café Boa Vista <span>·</span> Servir bem e honestidade é nossa missão.</span><span>Gestão do café · {{ app_version }}</span></footer></main></div>
+</body></html>
